@@ -354,7 +354,7 @@ void Rslam::visualizePose() {
 	viewer->setCameraProjectionType(Viewer::ProjectionType::PERSPECTIVE);
 
 	FileReader *objFile = new FileReader();
-	objFile->readObj("D:/dev/c-projects/OpenSor/test_opensor_viewer/data/models/monkey.obj", FileReader::ArrayFormat::VERTEX_NORMAL_TEXTURE, 0.01f);
+	objFile->readObj("monkey.obj", FileReader::ArrayFormat::VERTEX_NORMAL_TEXTURE, 0.01f);
 
 	//box solid
 	//cv::Mat texture = cv::imread("texture.png");
