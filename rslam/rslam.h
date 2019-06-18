@@ -103,6 +103,8 @@ public:
 	// Functions
 	int initialize(int width, int height, int fps, double cx, double cy, double fx, double fy);
 	int initialize(Settings settings);
+	int recordAll();
+	int playback(const char* serialNumber);
 	int run(); // poseSolver thread
 	int poseSolver(); // main loop for solving pose
 	int extractGyroAndAccel();

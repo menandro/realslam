@@ -99,6 +99,115 @@ int Rslam::initialize(Settings settings) {
 	return initialize(width, height, fps, cx, cy, fx, fy);
 }
 
+// Record feed from all available sensors
+int Rslam::recordAll() {
+	rs2::context context;
+	std::vector<rs2::pipeline> pipelines;
+	// Start a streaming pipe per each connected device
+	auto tt = context.query_devices();
+	std::cout << "Size " << tt.size() << std::endl;
+	/*rs2::device d435i;
+	rs2::device t265;*/
+	std::clock_t start;
+	double duration;
+	// Start pipes as recorders
+	for (auto&& dev : context.query_devices())
+	{
+		rs2::pipeline pipe(context);
+		rs2::config cfg;
+		cfg.enable_device(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
+		cfg.enable_record_to_file(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
+		if (dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) == "843112071357") {
+			// d435 device, enable depth, 2IR, rgb, imu
+			cfg.disable_all_streams();
+			cfg.enable_stream(RS2_STREAM_DEPTH, 640, 360, rs2_format::RS2_FORMAT_Z16, 90);
+			cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 360, rs2_format::RS2_FORMAT_Y8, 90);
+			cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 360, rs2_format::RS2_FORMAT_Y8, 90);
+			cfg.enable_stream(RS2_STREAM_COLOR, 640, 360, RS2_FORMAT_BGR8, 60);
+			cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
+			cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
+		}
+		else {
+			// t265 device, imu
+			//cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
+			//cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
+		}
+		pipe.start(cfg);
+		pipelines.emplace_back(pipe);
+	}
+	std::cout << "Recording..." << std::endl;
+	std::cout << "Press g: stop recording." << std::endl;
+	cv::Mat something = cv::imread("recording.png");
+	cv::imshow("test", something);
+	start = std::clock();
+	while (true) {
+		char pressed = cv::waitKey(10);
+		if (pressed == 27) break; //press escape
+
+		//if (pressed == 'y'){
+		//	std::cout << "Recording... press g to stop." << std::endl;
+		//	// Set all pipelines as recorder
+		//	for (int k = 0; k < pipelines.size(); k++) {
+		//		rs2::device device = pipelines[k].get_active_profile().get_device();
+		//		if (!device.as<rs2::recorder>()) {
+		//			pipelines[k].stop();
+		//			r
+		//		}
+		//	}
+		//}
+		if ((pressed == 'g') || ((std::clock() - start) / (double)CLOCKS_PER_SEC > 10.0)) {
+			std::cout << "Saving recording to file... ";
+			for (int k = 0; k < pipelines.size(); k++) {
+				pipelines[k].stop();
+			}
+			std::cout << "DONE." << std::endl;
+			break;
+		}
+	}
+	return 0;
+}
+
+int Rslam::playback(const char* serialNumber) {
+	try{
+		rs2::pipeline pipe;
+		rs2::config cfg;
+		cfg.enable_device_from_file(serialNumber);
+		pipe.start(cfg);
+		std::cout << "Pipe started" << std::endl;
+		const auto window_name = "Display Image";
+		cv::namedWindow(window_name, cv::WINDOW_AUTOSIZE);
+		rs2::colorizer color_map;
+
+		while (cv::waitKey(1) < 0 && cv::getWindowProperty(window_name, cv::WND_PROP_AUTOSIZE) >= 0)
+		{
+			rs2::frameset data = pipe.wait_for_frames(); // Wait for next set of frames from the camera
+			//std::cout << data.size() << std::endl;
+			rs2::frame depth = data.get_depth_frame().apply_filter(color_map);
+
+			// Query frame size (width and height)
+			const int w = depth.as<rs2::video_frame>().get_width();
+			const int h = depth.as<rs2::video_frame>().get_height();
+
+			// Create OpenCV matrix of size (w,h) from the colorized depth data
+			cv::Mat depthimage(cv::Size(w, h), CV_8UC3, (void*)depth.get_data(), cv::Mat::AUTO_STEP);
+
+			// Update the window with new data
+			cv::imshow(window_name, depthimage);
+		}
+		return EXIT_SUCCESS;
+	}
+	catch (const rs2::error & e)
+	{
+		std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+}
+
 // Thread calls
 int Rslam::run() {
 	std::thread t1(&Rslam::visualizePose, this);
