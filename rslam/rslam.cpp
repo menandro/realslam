@@ -116,7 +116,9 @@ int Rslam::recordAll() {
 		rs2::pipeline pipe(context);
 		rs2::config cfg;
 		cfg.enable_device(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
-		cfg.enable_record_to_file(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
+		std::string filename = dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+		filename.append(".bag");
+		cfg.enable_record_to_file(filename);
 		if (dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) == "843112071357") {
 			// d435 device, enable depth, 2IR, rgb, imu
 			cfg.disable_all_streams();
@@ -142,7 +144,7 @@ int Rslam::recordAll() {
 	start = std::clock();
 	while (true) {
 		char pressed = cv::waitKey(10);
-		if (pressed == 27) break; //press escape
+		//if (pressed == 27) break; //press escape
 
 		//if (pressed == 'y'){
 		//	std::cout << "Recording... press g to stop." << std::endl;
@@ -155,7 +157,7 @@ int Rslam::recordAll() {
 		//		}
 		//	}
 		//}
-		if ((pressed == 'g') || ((std::clock() - start) / (double)CLOCKS_PER_SEC > 10.0)) {
+		if ((pressed == 27) || (pressed == 'g')) {// || ((std::clock() - start) / (double)CLOCKS_PER_SEC > 10.0)) {
 			std::cout << "Saving recording to file... ";
 			for (int k = 0; k < pipelines.size(); k++) {
 				pipelines[k].stop();
