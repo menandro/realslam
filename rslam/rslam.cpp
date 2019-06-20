@@ -260,6 +260,8 @@ int Rslam::poseSolver() {
 	double last_ts[RS2_STREAM_COUNT];
 	double dt[RS2_STREAM_COUNT];
 	std::clock_t start;
+
+	double timer = 0.0;
 	double fps, oldFps = 0.0;
 
 	cv::Mat prevInfrared1 = cv::Mat::zeros(cv::Size(this->width, this->height), CV_8UC1);
@@ -321,15 +323,15 @@ int Rslam::poseSolver() {
 			//std::cout << currentKeyframe->keypoints.size() << std::endl;
 		}
 
-
 		fps = 1 / ((std::clock() - start) / (double)CLOCKS_PER_SEC);
 		oldFps = (fps + oldFps) / 2.0; // Running average
-		if (oldFps > 60.0) {
+		visualizeFps(oldFps);
+		/*if (oldFps > 60.0) {
 			visualizeFps(oldFps);
 		}
 		else {
 			visualizeFps(oldFps);
-		}
+		}*/
 
 		/*std::cout << std::fixed
 			<< gyro.ts << " " << gyro.lastTs << " "
@@ -720,7 +722,13 @@ void Rslam::visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir1) {
 }
 
 void Rslam::visualizeFps(double fps) {
-	cv::Mat im = cv::Mat::zeros(200, 400, CV_8UC3);
+	cv::Mat im = cv::Mat::zeros(400, 400, CV_8UC3);
+	im.setTo(cv::Scalar(50, 50, 50));
+	
+	//cv::circle(im, cv::Point(200, 200), 120, cv::Scalar(50, 50, 50), -1);
+	cv::circle(im, cv::Point(200, 200), fps*1.5, cv::Scalar(255, 255, 255), -1);
+	cv::circle(im, cv::Point(200, 200), 90, cv::Scalar(0, 0, 255), 1);
+
 	cv::putText(im, parseDecimal(fps, 1), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
 	cv::imshow("fps", im);
 }
