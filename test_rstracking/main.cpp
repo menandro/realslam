@@ -9,8 +9,9 @@ int main() {
 
 	// SLAM USING D435i
 	Rslam* rslam = new Rslam();
-	rslam->initialize(Rslam::D435I_848_480_60);
+	rslam->initialize(Rslam::D435I_IR_640_360_90, Rslam::ORB);
 	rslam->run();
+	//rslam->testOrb();
 	//rslam->recordAll();
 	//rslam->playback("843112071357");
 	//rslam->poseSolver();

@@ -15,7 +15,13 @@ public:
 	enum Settings {
 		D435I_848_480_60,
 		D435I_640_480_60,
+		D435I_IR_640_360_90,
 		T265
+	};
+
+	enum FeatureDetectionMethod {
+		SURF,
+		ORB
 	};
 
 	float GYRO_BIAS_X = 0.0011f;
@@ -57,6 +63,8 @@ public:
 	cv::Mat depth;
 	cv::Mat depthVis;
 	cv::Mat color;
+	cv::Mat infrared1;
+	cv::Mat infrared2;
 	cv::Mat intrinsic;
 	//CameraPose* cameraPose;
 
@@ -92,23 +100,76 @@ public:
 	// For Slam
 	int minHessian;
 	cv::cuda::SURF_CUDA surf;
+	cv::Ptr<cv::cuda::ORB> orb;
 	cv::Ptr< cv::cuda::DescriptorMatcher > matcher;
+	FeatureDetectionMethod featMethod;
+
 	cv::cuda::GpuMat d_im;
+	cv::cuda::GpuMat d_ir1;
+	cv::cuda::GpuMat d_ir2;
 	cv::cuda::GpuMat d_keypoints;
 	cv::cuda::GpuMat d_descriptors;
-	std::vector< cv::KeyPoint > keypoints;
+	cv::cuda::GpuMat d_keypointsIr1;
+	cv::cuda::GpuMat d_descriptorsIr1;
+	cv::cuda::GpuMat d_keypointsIr2;
+	cv::cuda::GpuMat d_descriptorsIr2;
+	std::vector<cv::KeyPoint> keypoints;
+	std::vector<cv::KeyPoint> keypointsIr1;
+	std::vector<cv::KeyPoint> keypointsIr2;
+	cv::Mat descriptorsIr1;
+	cv::Mat descriptorsIr2;
+	std::vector<std::vector<cv::DMatch>> matches;
+
+	// For Stereo Matching
+	std::vector<cv::KeyPoint> stereoKeypointsIr1;
+	std::vector<cv::KeyPoint> stereoKeypointsIr2;
+	std::vector<cv::Point2f> stereoPointsIr1;
+	std::vector<cv::Point2f> stereoPointsIr2;
+	std::vector<float> stereoDistances;
+
+	// For keyframing
+	class Keyframe {
+	public:
+		Keyframe() {};
+		~Keyframe() {};
+		cv::Mat im;
+		cv::cuda::GpuMat d_im;
+		std::vector<cv::KeyPoint> keypoints;
+		cv::Mat descriptors;
+		cv::cuda::GpuMat d_descriptors;
+		cv::Mat R;
+		cv::Mat t;
+
+		// These values change every frame
+		std::vector<cv::KeyPoint> matchedKeypoints;
+		std::vector<cv::KeyPoint> matchedKeypointsSrc;
+		std::vector<cv::Point2f> matchedPoints;
+		std::vector<cv::Point2f> matchedPointsSrc;
+		std::vector<float> matchedDistances;
+	};
+	std::vector<Keyframe> keyframes;
 
 	int solveKeypointsAndDescriptors(cv::Mat im);
+	int solveStereoSurf(cv::Mat ir1, cv::Mat ir2);
+	int solveStereoOrb(cv::Mat ir1, cv::Mat ir2);
+	int solveRelativeSurf(Keyframe * keyframe);
+	int solveRelativeOrb(Keyframe * keyframe);
 
 	// Functions
+	int initialize(Settings settings, FeatureDetectionMethod featMethod);
+
+private:
 	int initialize(int width, int height, int fps, double cx, double cy, double fx, double fy);
 	int initialize(Settings settings);
+
+public:
 	int recordAll();
 	int playback(const char* serialNumber);
 	int run(); // poseSolver thread
 	int poseSolver(); // main loop for solving pose
 	int extractGyroAndAccel();
 	int extractColorAndDepth();
+	int extractIr();
 	int extractTimeStamps();
 
 	void updatePose();
@@ -121,14 +182,20 @@ public:
 	void visualizePose();
 	void visualizeColor();
 	void visualizeDepth();
-	void visualizeKeypoints();
+	void visualizeKeypoints(cv::Mat im);
+	void visualizeKeypoints(cv::Mat ir1, cv::Mat ir2);
+	void visualizeStereoKeypoints(cv::Mat ir1, cv::Mat ir2);
+	void visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir2);
+	void visualizeFps(double fps);
 	cv::Mat gyroDisp;
 	cv::Mat accelDisp;
 
 	//Tools
 	std::string parseDecimal(double f);
+	std::string parseDecimal(double f, int precision);
 
 	// Tests
+	int testOrb();
 	int testT265();
 	int runTestViewerSimpleThread();
 	int testViewerSimple();
@@ -139,7 +206,6 @@ public:
 
 	int showAlignedDepth();
 	int showDepth();
-	int solveRelativePose();
 	static int getPose(float *x, float *y, float *z, float *roll, float *pitch, float *yaw);
 
 

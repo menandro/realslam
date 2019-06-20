@@ -10,14 +10,27 @@ int Rslam::initialize(int width, int height, int fps, double cx, double cy, doub
 		auto dev = ctx->query_devices();
 		for (auto&& devfound : dev) {
 			std::cout << "Found device: " << devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
+			if (devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) == "843112071357") {
+				// Turn off emitter
+				auto depth_sensor = dev[0].first<rs2::depth_sensor>();
+				if (depth_sensor.supports(RS2_OPTION_EMITTER_ENABLED))
+				{
+					depth_sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.f); // Disable emitter
+				}
+				// Turn off autoexposure
+
+			}
 		}
 		//std::cout << dev.size() << std::endl;
 		//std::cout << "Found: " << dev[0].get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
 		//std::cout << "Found: " << dev[1].get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
 		rs2::config cfg;
+
 		cfg.enable_device("843112071357");
-		cfg.enable_stream(RS2_STREAM_DEPTH, this->width, this->height, rs2_format::RS2_FORMAT_Z16, this->fps);
-		cfg.enable_stream(RS2_STREAM_COLOR, this->width, this->height, RS2_FORMAT_BGR8, this->fps);
+		//cfg.enable_stream(RS2_STREAM_DEPTH, this->width, this->height, rs2_format::RS2_FORMAT_Z16, this->fps);
+		//cfg.enable_stream(RS2_STREAM_COLOR, this->width, this->height, RS2_FORMAT_BGR8, this->fps);
+		cfg.enable_stream(RS2_STREAM_INFRARED, 1, this->width, this->height, RS2_FORMAT_Y8, this->fps);
+		cfg.enable_stream(RS2_STREAM_INFRARED, 2, this->width, this->height, RS2_FORMAT_Y8, this->fps);
 		cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
 		cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
 		pipe->start(cfg);
@@ -38,6 +51,8 @@ int Rslam::initialize(int width, int height, int fps, double cx, double cy, doub
 	depth = cv::Mat(this->height, this->width, CV_16S);
 	depthVis = cv::Mat(this->height, this->width, CV_8UC3);
 	color = cv::Mat(this->height, this->width, CV_8UC3);
+	infrared1 = cv::Mat(this->height, this->width, CV_8UC1);
+	infrared2 = cv::Mat(this->height, this->width, CV_8UC1);
 
 	/*camerapose = new CameraPose();
 	double intrinsicData[9] = { fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0 };
@@ -49,12 +64,23 @@ int Rslam::initialize(int width, int height, int fps, double cx, double cy, doub
 	accelDisp = cv::Mat::zeros(200, 600, CV_8UC3);
 
 	// SLAM
-	minHessian = 10000;
-	surf = cv::cuda::SURF_CUDA(this->minHessian);
-	surf.hessianThreshold = minHessian;
-	matcher = cv::cuda::DescriptorMatcher::createBFMatcher();
-
+	if (featMethod == SURF) {
+		minHessian = 10000;
+		surf = cv::cuda::SURF_CUDA(this->minHessian);
+		surf.hessianThreshold = minHessian;
+		matcher = cv::cuda::DescriptorMatcher::createBFMatcher(); //for surf
+	}
+	else if (featMethod == ORB){
+		matcher = cv::cuda::DescriptorMatcher::createBFMatcher(cv::NORM_HAMMING); //for orb
+		orb = cv::cuda::ORB::create(200, 2.0f, 3);// , 10, 0, 2, 0, 10);
+		//orb = cv::cuda::ORB::create(200, 2.0f, 3, 10, 0, 2, 0, 10);
+	}
 	return EXIT_SUCCESS;
+}
+
+int Rslam::initialize(Settings settings, FeatureDetectionMethod featMethod) {
+	this->featMethod = featMethod;
+	return initialize(settings);
 }
 
 int Rslam::initialize(Settings settings) {
@@ -86,6 +112,15 @@ int Rslam::initialize(Settings settings) {
 		width = 640;
 		height = 480;
 		fps = 60;
+	}
+	else if (settings == D435I_IR_640_360_90) {
+		fx = 321.902;
+		fy = 321.902;
+		cx = 320.729;
+		cy = 181.862;
+		width = 640;
+		height = 360;
+		fps = 90;
 	}
 	else { //load default
 		fx = 614.122;
@@ -212,9 +247,9 @@ int Rslam::playback(const char* serialNumber) {
 
 // Thread calls
 int Rslam::run() {
-	std::thread t1(&Rslam::visualizePose, this);
+	//std::thread t1(&Rslam::visualizePose, this);
 	std::thread t2(&Rslam::poseSolver, this);
-	t1.join();
+	//t1.join();
 	t2.join();
 }
 
@@ -224,10 +259,23 @@ int Rslam::poseSolver() {
 	accel.ts = 0.0;
 	double last_ts[RS2_STREAM_COUNT];
 	double dt[RS2_STREAM_COUNT];
-	while (cv::waitKey(1) < 0) {
+	std::clock_t start;
+	double fps, oldFps = 0.0;
+
+	cv::Mat prevInfrared1 = cv::Mat::zeros(cv::Size(this->width, this->height), CV_8UC1);
+	Keyframe * currentKeyframe = new Keyframe();
+	bool keyframeExist = false;
+
+	while (true) {
+		char pressed = cv::waitKey(10);
+		if (pressed == 27) break;
+		if (pressed == 'r') keyframeExist = false; // change this to automatic keyframing
+
 		if (!pipe->poll_for_frames(&frameset)) {
 			continue;
 		}
+
+		start = std::clock();
 		frameset = alignToColor.process(frameset);
 		//extractTimeStamps();
 		extractGyroAndAccel();
@@ -235,12 +283,53 @@ int Rslam::poseSolver() {
 		updatePose();
 
 		// Get color and depth frames
-		extractColorAndDepth();
+		//extractColorAndDepth();
+		extractIr();
 
 		//visualizeColor();
 		//visualizeDepth();
-		solveKeypointsAndDescriptors(color);
-		visualizeKeypoints();
+
+		// Solve Stereo
+		if (featMethod == SURF) {
+			solveStereoSurf(infrared1, infrared2);
+		}
+		else if (featMethod == ORB) {
+			solveStereoOrb(infrared1, infrared2);
+		}
+		//visualizeStereoKeypoints(infrared1, infrared2);
+
+		// Solve Pose
+		// Add keypoints from stereo that are not in the current keyframe
+		if (!keyframeExist) {
+			currentKeyframe->im = infrared1.clone();
+			currentKeyframe->d_im.upload(currentKeyframe->im);
+			currentKeyframe->keypoints = keypointsIr1;
+			//std::cout << "Keyframe keypoints: " << currentKeyframe->keypoints.size() << std::endl;
+			keyframeExist = true;
+		}
+		else {
+			if (featMethod == SURF) {
+				solveRelativeSurf(currentKeyframe);
+			}
+			else {
+				solveRelativeOrb(currentKeyframe);
+			}
+			visualizeRelativeKeypoints(currentKeyframe, infrared1);
+			//currentKeyframe->im = infrared1.clone();
+			//currentKeyframe->keypoints = stereoKeypointsIr1;
+			//currentKeyframe->keypoints = currentKeyframe->matchedKeypoints;
+			//std::cout << currentKeyframe->keypoints.size() << std::endl;
+		}
+
+
+		fps = 1 / ((std::clock() - start) / (double)CLOCKS_PER_SEC);
+		oldFps = (fps + oldFps) / 2.0; // Running average
+		if (oldFps > 60.0) {
+			visualizeFps(oldFps);
+		}
+		else {
+			visualizeFps(oldFps);
+		}
 
 		/*std::cout << std::fixed
 			<< gyro.ts << " " << gyro.lastTs << " "
@@ -264,10 +353,203 @@ int Rslam::poseSolver() {
 	return 0;
 }
 
+int Rslam::solveStereoSurf(cv::Mat ir1, cv::Mat ir2) {
+	d_ir1.upload(ir1); //first cuda call is always slow
+	d_ir2.upload(ir2);
+	surf(d_ir1, cv::cuda::GpuMat(), d_keypointsIr1, d_descriptorsIr1);
+	surf(d_ir2, cv::cuda::GpuMat(), d_keypointsIr2, d_descriptorsIr2);
+	surf.downloadKeypoints(d_keypointsIr1, keypointsIr1);
+	surf.downloadKeypoints(d_keypointsIr2, keypointsIr2);
+
+	if ((d_keypointsIr1.empty() || d_keypointsIr2.empty()) || (d_descriptorsIr1.cols <= 1) || (d_descriptorsIr2.cols <= 1)) {
+		std::cout << "No keypoints found." << std::endl;
+	}
+	else {
+		matcher->knnMatch(d_descriptorsIr1, d_descriptorsIr2, matches, 2);
+		if (!matches.empty()) {
+			stereoKeypointsIr1 = std::vector< cv::KeyPoint >();
+			stereoKeypointsIr2 = std::vector< cv::KeyPoint >();
+			stereoKeypointsIr1.clear();
+			stereoKeypointsIr2.clear();
+			stereoPointsIr1 = std::vector<cv::Point2f>();
+			stereoPointsIr2 = std::vector<cv::Point2f>();
+			stereoPointsIr1.clear();
+			stereoPointsIr2.clear();
+			stereoDistances = std::vector< float >();
+			stereoDistances.clear();
+			for (int k = 0; k < (int)matches.size(); k++)
+			{
+				if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
+				{
+					stereoKeypointsIr1.push_back(keypointsIr1[matches[k][0].queryIdx]);
+					stereoKeypointsIr2.push_back(keypointsIr2[matches[k][0].trainIdx]);
+					stereoPointsIr1.push_back(keypointsIr1[matches[k][0].queryIdx].pt);
+					stereoPointsIr2.push_back(keypointsIr2[matches[k][0].trainIdx].pt);
+					stereoDistances.push_back(matches[k][0].distance);
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+int Rslam::solveStereoOrb(cv::Mat ir1, cv::Mat ir2) {
+	d_ir1.upload(ir1); //first cuda call is always slow
+	d_ir2.upload(ir2);
+
+	/*orb->detect(d_ir1, keypointsIr1);
+	orb->compute(d_ir1, keypointsIr1, d_descriptorsIr1);
+
+	orb->detect(d_ir2, keypointsIr2);
+	orb->compute(d_ir2, keypointsIr2, d_descriptorsIr2);*/
+	orb->detectAndCompute(d_ir1, cv::cuda::GpuMat(), keypointsIr1, d_descriptorsIr1);
+	orb->detectAndCompute(d_ir2, cv::cuda::GpuMat(), keypointsIr2, d_descriptorsIr2);
+	//d_descriptorsIr1.download(descriptorsIr1);
+	//d_descriptorsIr2.download(descriptorsIr2);
+
+	if ((keypointsIr1.empty() || keypointsIr2.empty()) || (d_descriptorsIr1.cols <= 1) || (d_descriptorsIr2.cols <= 1)) {
+		std::cout << "No keypoints found." << std::endl;
+	}
+	else {
+		matcher->knnMatch(d_descriptorsIr1, d_descriptorsIr2, matches, 2);
+		if (!matches.empty()) {
+			stereoKeypointsIr1 = std::vector< cv::KeyPoint >();
+			stereoKeypointsIr2 = std::vector< cv::KeyPoint >();
+			stereoKeypointsIr1.clear();
+			stereoKeypointsIr2.clear();
+			stereoPointsIr1 = std::vector<cv::Point2f>();
+			stereoPointsIr2 = std::vector<cv::Point2f>();
+			stereoPointsIr1.clear();
+			stereoPointsIr2.clear();
+			stereoDistances = std::vector< float >();
+			stereoDistances.clear();
+			for (int k = 0; k < (int)matches.size(); k++)
+			{
+				if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
+				{
+					stereoKeypointsIr1.push_back(keypointsIr1[matches[k][0].queryIdx]);
+					stereoKeypointsIr2.push_back(keypointsIr2[matches[k][0].trainIdx]);
+					stereoPointsIr1.push_back(keypointsIr1[matches[k][0].queryIdx].pt);
+					stereoPointsIr2.push_back(keypointsIr2[matches[k][0].trainIdx].pt);
+					stereoDistances.push_back(matches[k][0].distance);
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+int Rslam::solveRelativeOrb(Keyframe *keyframe) {
+	// Recompute descriptors
+	/*if ((keyframe->keypoints.empty() || stereoKeypointsIr1.empty())) return 0;
+
+	orb->compute(keyframe->d_im, keyframe->keypoints, keyframe->d_descriptors);
+	orb->compute(d_ir1, stereoKeypointsIr1, d_descriptorsIr1);*/
+	//orb->detect(keyframe->d_im, keyframe->keypoints);
+	if (!keyframe->keypoints.empty()) {
+		orb->compute(keyframe->d_im, keyframe->keypoints, keyframe->d_descriptors);
+		//std::cout << keyframe->keypoints.size() << std::endl;
+	}
+
+	//keyframe->keypoints.clear();
+	//orb->detectAndCompute(keyframe->d_im, cv::cuda::GpuMat(), keyframe->keypoints, keyframe->d_descriptors);
+	if (!stereoKeypointsIr1.empty()) {
+		orb->compute(d_ir1, stereoKeypointsIr1, d_descriptorsIr1);
+	}
+	
+	if ((stereoKeypointsIr1.empty() || keyframe->keypoints.empty()) || (d_descriptorsIr1.cols <= 1) || (keyframe->d_descriptors.cols <= 1)) {
+		std::cout << "No keypoints found for relative pose." << std::endl;
+	}
+	else {
+		matcher->knnMatch(keyframe->d_descriptors, d_descriptorsIr1, matches, 2);
+		if (!matches.empty()) {
+			//std::cout << "Matches: " << matches.size() << std::endl;
+			keyframe->matchedKeypoints = std::vector< cv::KeyPoint >();
+			keyframe->matchedKeypointsSrc = std::vector< cv::KeyPoint >();
+			keyframe->matchedKeypoints.clear();
+			keyframe->matchedKeypointsSrc.clear();
+
+			keyframe->matchedPoints = std::vector<cv::Point2f>();
+			keyframe->matchedPointsSrc = std::vector<cv::Point2f>();
+			keyframe->matchedPoints.clear();
+			keyframe->matchedPointsSrc.clear();
+
+			keyframe->matchedDistances = std::vector< float >();
+			keyframe->matchedDistances.clear();
+
+			for (int k = 0; k < (int)matches.size(); k++)
+			{
+				if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
+				{
+					keyframe->matchedKeypoints.push_back(keyframe->keypoints[matches[k][0].queryIdx]);
+					keyframe->matchedKeypointsSrc.push_back(stereoKeypointsIr1[matches[k][0].trainIdx]);
+
+					keyframe->matchedPoints.push_back(keyframe->keypoints[matches[k][0].queryIdx].pt);
+					keyframe->matchedPointsSrc.push_back(stereoKeypointsIr1[matches[k][0].trainIdx].pt);
+
+					keyframe->matchedDistances.push_back(matches[k][0].distance);
+				}
+			}
+		}
+		else {
+			std::cout << "No relative matches found. " << std::endl;
+		}
+
+	}
+	return 0;
+}
+
+int Rslam::solveRelativeSurf(Keyframe *keyframe) {
+	keyframe->d_im.upload(keyframe->im);
+
+	// Recompute descriptors
+	surf(keyframe->d_im, cv::cuda::GpuMat(), keyframe->keypoints, keyframe->d_descriptors, true);
+	surf(d_ir1, cv::cuda::GpuMat(), stereoKeypointsIr1, d_descriptorsIr1, true);
+	surf.downloadKeypoints(d_keypointsIr1, keypointsIr1);
+	surf.downloadKeypoints(d_keypointsIr2, keypointsIr2);
+
+	if ((stereoKeypointsIr1.empty() || keyframe->keypoints.empty()) || (d_descriptorsIr1.cols <= 1) || (keyframe->d_descriptors.cols <= 1)) {
+		std::cout << "No keypoints found for relative pose." << std::endl;
+	}
+	else {
+		matcher->knnMatch(d_descriptorsIr1, keyframe->d_descriptors, matches, 2);
+		if (!matches.empty()) {
+			//std::cout << "Matches: " << matches.size() << std::endl;
+			keyframe->matchedKeypoints = std::vector< cv::KeyPoint >();
+			keyframe->matchedKeypointsSrc = std::vector< cv::KeyPoint >();
+			keyframe->matchedKeypoints.clear();
+			keyframe->matchedKeypointsSrc.clear();
+			keyframe->matchedPoints = std::vector<cv::Point2f>();
+			keyframe->matchedPointsSrc = std::vector<cv::Point2f>();
+			keyframe->matchedPoints.clear();
+			keyframe->matchedPointsSrc.clear();
+			keyframe->matchedDistances = std::vector< float >();
+			keyframe->matchedDistances.clear();
+			for (int k = 0; k < (int)matches.size(); k++)
+			{
+				if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
+				{
+					keyframe->matchedKeypoints.push_back(keyframe->keypoints[matches[k][0].queryIdx]);
+					keyframe->matchedKeypointsSrc.push_back(stereoKeypointsIr1[matches[k][0].trainIdx]);
+					keyframe->matchedPoints.push_back(keyframe->keypoints[matches[k][0].queryIdx].pt);
+					keyframe->matchedPointsSrc.push_back(stereoKeypointsIr1[matches[k][0].trainIdx].pt);
+					keyframe->matchedDistances.push_back(matches[k][0].distance);
+				}
+			}
+		}
+		else {
+			std::cout << "No relative matches found. " << std::endl;
+		}
+
+	}
+	return 0;
+}
+
 int Rslam::solveKeypointsAndDescriptors(cv::Mat im) {
-	cv::Mat gray;
-	cv::cvtColor(im, gray, CV_BGR2GRAY);
-	d_im.upload(gray); //first cuda call is always slow
+	//cv::Mat gray;
+	//cv::cvtColor(im, gray, CV_BGR2GRAY);
+	//d_im.upload(gray); //first cuda call is always slow
+	d_im.upload(im); //first cuda call is always slow
 	surf(d_im, cv::cuda::GpuMat(), d_keypoints, d_descriptors);
 	surf.downloadKeypoints(d_keypoints, keypoints);
 	return 0;
@@ -304,6 +586,14 @@ int Rslam::extractColorAndDepth() {
 	color = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)colorData.get_data(), cv::Mat::AUTO_STEP);
 	auto depthData = frameset.get_depth_frame();
 	depth = cv::Mat(cv::Size(width, height), CV_16S, (void*)depthData.get_data(), cv::Mat::AUTO_STEP);
+	return 0;
+}
+
+int Rslam::extractIr() {
+	auto infrared1Data = frameset.get_infrared_frame(1);
+	infrared1 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared1Data.get_data(), cv::Mat::AUTO_STEP);
+	auto infrared2Data = frameset.get_infrared_frame(2);
+	infrared2 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared2Data.get_data(), cv::Mat::AUTO_STEP);
 	return 0;
 }
 
@@ -385,11 +675,57 @@ void Rslam::visualizeDepth() {
 	cv::imshow("depth", depthVis);
 }
 
-void Rslam::visualizeKeypoints() {
+void Rslam::visualizeKeypoints(cv::Mat im) {
 	cv::Mat imout;
-	cv::drawKeypoints(color, keypoints, imout, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::drawKeypoints(im, keypoints, imout, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
 	cv::imshow("keypoints", imout);
 }
+
+void Rslam::visualizeKeypoints(cv::Mat ir1, cv::Mat ir2) {
+	cv::Mat imout1, imout2;
+	cv::drawKeypoints(ir1, keypointsIr1, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::imshow("ir1", imout1);
+	cv::drawKeypoints(ir2, keypointsIr2, imout2, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::imshow("ir2", imout1);
+}
+
+void Rslam::visualizeStereoKeypoints(cv::Mat ir1, cv::Mat ir2) {
+	cv::Mat imout1, imout2;
+	cv::drawKeypoints(ir1, stereoKeypointsIr1, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::putText(imout1, "detected keypoints: " + parseDecimal((double)keypointsIr1.size(), 0), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
+	cv::putText(imout1, "matched keypoints: " + parseDecimal((double)stereoKeypointsIr1.size(), 0), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
+	cv::imshow("ir1", imout1);
+	cv::drawKeypoints(ir2, stereoKeypointsIr2, imout2, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::imshow("ir2", imout2);
+}
+
+void Rslam::visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir1) {
+	cv::Mat imout1, imout2;
+	cv::drawKeypoints(keyframe->im, keyframe->matchedKeypoints, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DEFAULT);
+	cv::putText(imout1, "detected keypoints: " + parseDecimal((double)keyframe->keypoints.size(), 0), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
+	cv::putText(imout1, "matched keypoints: " + parseDecimal((double)keyframe->matchedKeypoints.size(), 0), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
+	cv::imshow("keyframe", imout1);
+	cv::drawKeypoints(ir1, keyframe->matchedKeypointsSrc, imout2, cv::Scalar(0, 0, 255), cv::DrawMatchesFlags::DEFAULT);
+	cv::putText(imout2, "matched keypoints: " + parseDecimal((double)keyframe->matchedKeypointsSrc.size(), 0), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
+	cv::imshow("currentframe", imout2);
+
+	//cv::Mat imout1 = keyframe->im.clone();
+	//cv::Mat imout2 = ir1.clone();
+	////cv::drawKeypoints(keyframe->im, keyframe->matchedKeypoints, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	//cv::putText(imout1, "detected keypoints: " + parseDecimal((double)keyframe->keypoints.size(), 0), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
+	//cv::putText(imout1, "matched keypoints: " + parseDecimal((double)keyframe->matchedKeypoints.size(), 0), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
+	//cv::imshow("keyframe", imout1);
+	////cv::drawKeypoints(ir1, keyframe->matchedKeypointsSrc, imout2, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	//cv::imshow("currentframe", imout2);
+}
+
+void Rslam::visualizeFps(double fps) {
+	cv::Mat im = cv::Mat::zeros(200, 400, CV_8UC3);
+	cv::putText(im, parseDecimal(fps, 1), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
+	cv::imshow("fps", im);
+}
+
+
 
 
 // Tools
@@ -403,6 +739,21 @@ std::string Rslam::parseDecimal(double f) {
 	else {
 		//positive or zero
 		string.precision(5);
+		string << std::fixed << "+" << f;
+	}
+	return string.str();
+}
+
+std::string Rslam::parseDecimal(double f, int precision) {
+	std::stringstream string;
+	if (f < 0) {
+		//negative
+		string.precision(precision);
+		string << std::fixed << f;
+	}
+	else {
+		//positive or zero
+		string.precision(precision);
 		string << std::fixed << "+" << f;
 	}
 	return string.str();
@@ -433,6 +784,21 @@ std::string Rslam::parseDecimal(double f) {
 
 
 // TESTS **********************************************
+int Rslam::testOrb() {
+	cv::Mat im = cv::imread("ir1.png");
+	cv::Ptr<cv::cuda::ORB> orb = cv::cuda::ORB::create();
+	cv::Mat gray;
+	cv::cvtColor(im, gray, CV_BGR2GRAY);
+	cv::cuda::GpuMat d_im(gray);
+	std::vector<cv::KeyPoint> kp;
+	orb->detect(d_im, kp);
+	cv::Mat imout;
+	cv::drawKeypoints(im, kp, imout, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::imshow("orb test", imout);
+	cv::waitKey();
+	return 0;
+}
+
 int Rslam::testT265() {
 	try {
 		rs2::context ctx;
@@ -612,14 +978,6 @@ int Rslam::testImu() {
 			//	<< std::endl;
 		}
 	}
-	return 0;
-}
-
-
-
-int Rslam::solveRelativePose() {
-
-
 	return 0;
 }
 
