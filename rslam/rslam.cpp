@@ -1,39 +1,61 @@
 #include "rslam.h"
 
-int Rslam::initialize(int width, int height, int fps, double cx, double cy, double fx, double fy) {
+int Rslam::initialize(int width, int height, int fps) {
+	viewer = new Viewer();
+
 	this->width = width;
 	this->height = height;
 	this->fps = fps;
+
 	try {
 		ctx = new rs2::context();
-		pipe = new rs2::pipeline(*ctx);
+		//pipe = new rs2::pipeline(*ctx);
+		//pipelines = new std::vector<rs2::pipeline*>();
 		auto dev = ctx->query_devices();
 		for (auto&& devfound : dev) {
-			std::cout << "Found device: " << devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
-			if (devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) == "843112071357") {
+			rs2::pipeline * pipe = new rs2::pipeline(*ctx);
+			rs2::config cfg;
+
+			std::cout << "Found devices: " << devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
+			const char * serialNo = devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+			if ((std::strcmp(serialNo, "843112071357") == 0) || (std::strcmp(serialNo, "801212070810") == 0)) {
+				std::cout << "Configurating " << serialNo << std::endl;
 				// Turn off emitter
 				auto depth_sensor = dev[0].first<rs2::depth_sensor>();
 				if (depth_sensor.supports(RS2_OPTION_EMITTER_ENABLED))
 				{
-					depth_sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.f); // Disable emitter
+					depth_sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.0f); // Disable emitter
 				}
-				// Turn off autoexposure
+				
+				rs2::config cfg;
+				cfg.enable_device(devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
+				cfg.enable_stream(RS2_STREAM_DEPTH, this->width, this->height, rs2_format::RS2_FORMAT_Z16, this->fps);
+				cfg.enable_stream(RS2_STREAM_COLOR, this->width, this->height, RS2_FORMAT_BGR8, 60);
+				cfg.enable_stream(RS2_STREAM_INFRARED, 1, this->width, this->height, RS2_FORMAT_Y8, this->fps);
+				cfg.enable_stream(RS2_STREAM_INFRARED, 2, this->width, this->height, RS2_FORMAT_Y8, this->fps);
+				if ((std::strcmp(serialNo, "843112071357") == 0)) {
+					cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
+					cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
+				}
+				pipe->start(cfg);
+				pipelines.emplace_back(pipe);
 
+				if ((std::strcmp(serialNo, "843112071357") == 0)) {
+					device0.pipe = pipe;
+					device0.id = "device0";
+				}
+				else if ((std::strcmp(serialNo, "801212070810") == 0)) {
+					device1.pipe = pipe;
+					device1.id = "device1";
+				}
+				std::cout << "Pipe created from: " << serialNo << std::endl;
 			}
 		}
 		//std::cout << dev.size() << std::endl;
 		//std::cout << "Found: " << dev[0].get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
 		//std::cout << "Found: " << dev[1].get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
-		rs2::config cfg;
-
-		cfg.enable_device("843112071357");
-		//cfg.enable_stream(RS2_STREAM_DEPTH, this->width, this->height, rs2_format::RS2_FORMAT_Z16, this->fps);
-		//cfg.enable_stream(RS2_STREAM_COLOR, this->width, this->height, RS2_FORMAT_BGR8, this->fps);
-		cfg.enable_stream(RS2_STREAM_INFRARED, 1, this->width, this->height, RS2_FORMAT_Y8, this->fps);
-		cfg.enable_stream(RS2_STREAM_INFRARED, 2, this->width, this->height, RS2_FORMAT_Y8, this->fps);
-		cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
-		cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
-		pipe->start(cfg);
+		
+		
 	}
 	catch (const rs2::error & e)
 	{
@@ -47,12 +69,6 @@ int Rslam::initialize(int width, int height, int fps, double cx, double cy, doub
 	}
 
 	alignToColor = rs2::align(RS2_STREAM_COLOR);
-
-	depth = cv::Mat(this->height, this->width, CV_16S);
-	depthVis = cv::Mat(this->height, this->width, CV_8UC3);
-	color = cv::Mat(this->height, this->width, CV_8UC3);
-	infrared1 = cv::Mat(this->height, this->width, CV_8UC1);
-	infrared2 = cv::Mat(this->height, this->width, CV_8UC1);
 
 	/*camerapose = new CameraPose();
 	double intrinsicData[9] = { fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0 };
@@ -75,6 +91,9 @@ int Rslam::initialize(int width, int height, int fps, double cx, double cy, doub
 		orb = cv::cuda::ORB::create(200, 2.0f, 3);// , 10, 0, 2, 0, 10);
 		//orb = cv::cuda::ORB::create(200, 2.0f, 3, 10, 0, 2, 0, 10);
 	}
+
+	initContainers(device0);
+	initContainers(device1);
 	return EXIT_SUCCESS;
 }
 
@@ -114,10 +133,12 @@ int Rslam::initialize(Settings settings) {
 		fps = 60;
 	}
 	else if (settings == D435I_IR_640_360_90) {
-		fx = 321.902;
+		setIntrinsics(device0, 320.729, 181.862, 321.902, 321.902);
+		setIntrinsics(device1, 320.729, 181.862, 321.902, 321.902);
+		/*fx = 321.902;
 		fy = 321.902;
 		cx = 320.729;
-		cy = 181.862;
+		cy = 181.862;*/
 		width = 640;
 		height = 360;
 		fps = 90;
@@ -131,7 +152,37 @@ int Rslam::initialize(Settings settings) {
 		height = 480;
 		fps = 60;
 	}
-	return initialize(width, height, fps, cx, cy, fx, fy);
+	return initialize(width, height, fps);
+}
+
+int Rslam::setIntrinsics(Device &device, double cx, double cy, double fx, double fy) {
+	device.cx = cx;
+	device.cy = cy;
+	device.fx = fx;
+	device.fy = fy;
+	double intrinsicData[9] = { fx, 0, cx, 0, fy, cy, 0, 0 , 1 };
+	device.intrinsic = cv::Mat(3, 3, CV_64F, intrinsicData).clone();
+	device.distCoeffs = cv::Mat(4, 1, CV_64F);
+	device.distCoeffs.at<double>(0) = 0;
+	device.distCoeffs.at<double>(1) = 0;
+	device.distCoeffs.at<double>(2) = 0;
+	device.distCoeffs.at<double>(3) = 0;
+
+	device.Rvec = cv::Mat::zeros(3, 1, CV_64F);
+	device.t = cv::Mat::zeros(3, 1, CV_64F);
+
+	
+
+	return 0;
+}
+
+int Rslam::initContainers(Device &device) {
+	device.depth = cv::Mat(this->height, this->width, CV_16S);
+	device.depthVis = cv::Mat(this->height, this->width, CV_8UC3);
+	device.color = cv::Mat(this->height, this->width, CV_8UC3);
+	device.infrared1 = cv::Mat(this->height, this->width, CV_8UC1);
+	device.infrared2 = cv::Mat(this->height, this->width, CV_8UC1);
+	return 0;
 }
 
 // Record feed from all available sensors
@@ -247,16 +298,16 @@ int Rslam::playback(const char* serialNumber) {
 
 // Thread calls
 int Rslam::run() {
-	//std::thread t1(&Rslam::visualizePose, this);
-	std::thread t2(&Rslam::poseSolver, this);
-	//t1.join();
+	std::thread t1(&Rslam::visualizePose, this);
+	//std::thread t2(&Rslam::poseSolver, this);
+	//std::thread t2(&Rslam::poseSolverDefaultStereo, this);
+	std::thread t2(&Rslam::poseSolverDefaultStereoMulti, this);
+	t1.join();
 	t2.join();
 }
 
 // Main loop for pose estimation
-int Rslam::poseSolver() {
-	gyro.ts = 0.0;
-	accel.ts = 0.0;
+int Rslam::poseSolverDefaultStereoMulti() {
 	double last_ts[RS2_STREAM_COUNT];
 	double dt[RS2_STREAM_COUNT];
 	std::clock_t start;
@@ -265,206 +316,101 @@ int Rslam::poseSolver() {
 	double fps, oldFps = 0.0;
 
 	cv::Mat prevInfrared1 = cv::Mat::zeros(cv::Size(this->width, this->height), CV_8UC1);
-	Keyframe * currentKeyframe = new Keyframe();
-	bool keyframeExist = false;
+	
+	// Placeholder TODO: move to per device
+	device0.currentKeyframe = new Keyframe();
+	device0.keyframeExist = false;
+	device0.currentKeyframe->R = cv::Mat::zeros(3, 1, CV_64F);
+	device0.currentKeyframe->t = cv::Mat::zeros(3, 1, CV_64F);
+	
+	device1.currentKeyframe = new Keyframe();
+	device1.keyframeExist = false;
+	device1.currentKeyframe->R = cv::Mat::zeros(3, 1, CV_64F);
+	device1.currentKeyframe->t = cv::Mat::zeros(3, 1, CV_64F);
 
 	while (true) {
 		char pressed = cv::waitKey(10);
 		if (pressed == 27) break;
-		if (pressed == 'r') keyframeExist = false; // change this to automatic keyframing
-
-		if (!pipe->poll_for_frames(&frameset)) {
-			continue;
+		if (pressed == 'r') {
+			device0.keyframeExist = false; // change this to automatic keyframing
+			device1.keyframeExist = false;
 		}
+
+		// Poll framesets multi-camera (when any is available)
+		bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset) | 
+			device1.pipe->poll_for_frames(&device1.frameset));
+		if (!pollSuccess) continue;
 
 		start = std::clock();
-		frameset = alignToColor.process(frameset);
-		//extractTimeStamps();
-		extractGyroAndAccel();
-		visualizeImu();
-		updatePose();
+		extractGyroAndAccel(device0);
+		//visualizeImu();
 
 		// Get color and depth frames
-		//extractColorAndDepth();
-		extractIr();
+		extractColorAndDepth(device0);
+		extractColorAndDepth(device1);
+		extractIr(device0);
+		extractIr(device1);
+		//visualizeColor(device0);
+		//visualizeDepth(device1);
+		
+		// Solve current frame keypoints nad descriptors
+		detectAndComputeOrb(device0.infrared1, device0.d_ir1, device0.keypointsIr1, device0.d_descriptorsIr1);
+		detectAndComputeOrb(device1.infrared1, device1.d_ir1, device1.keypointsIr1, device1.d_descriptorsIr1);
 
-		//visualizeColor();
-		//visualizeDepth();
+		// Match with keyframe
+		matchAndPose(device0);
+		matchAndPose(device1);
+		//visualizeRelativeKeypoints(device0.currentKeyframe, device0.infrared1);
+		//visualizeRelativeKeypoints(device1.currentKeyframe, device1.infrared1);
 
-		// Solve Stereo
-		if (featMethod == SURF) {
-			solveStereoSurf(infrared1, infrared2);
-		}
-		else if (featMethod == ORB) {
-			solveStereoOrb(infrared1, infrared2);
-		}
-		//visualizeStereoKeypoints(infrared1, infrared2);
+		Device viewDevice = device1;
+		viewDevice.Rvec = viewDevice.currentKeyframe->R;
+		viewDevice.t = viewDevice.currentKeyframe->t;
+		this->Rvec = viewDevice.Rvec;
+		this->t = viewDevice.t;
+		updateViewerPose();
 
-		// Solve Pose
-		// Add keypoints from stereo that are not in the current keyframe
-		if (!keyframeExist) {
-			currentKeyframe->im = infrared1.clone();
-			currentKeyframe->d_im.upload(currentKeyframe->im);
-			currentKeyframe->keypoints = keypointsIr1;
-			//std::cout << "Keyframe keypoints: " << currentKeyframe->keypoints.size() << std::endl;
-			keyframeExist = true;
-		}
-		else {
-			if (featMethod == SURF) {
-				solveRelativeSurf(currentKeyframe);
-			}
-			else {
-				solveRelativeOrb(currentKeyframe);
-			}
-			visualizeRelativeKeypoints(currentKeyframe, infrared1);
-			//currentKeyframe->im = infrared1.clone();
-			//currentKeyframe->keypoints = stereoKeypointsIr1;
-			//currentKeyframe->keypoints = currentKeyframe->matchedKeypoints;
-			//std::cout << currentKeyframe->keypoints.size() << std::endl;
-		}
+		cv::Mat im = cv::Mat::zeros(100, 300, CV_8UC3);
+		im.setTo(cv::Scalar(50, 50, 50));
+		overlayMatrix(im, this->Rvec, this->t);
 
 		fps = 1 / ((std::clock() - start) / (double)CLOCKS_PER_SEC);
 		oldFps = (fps + oldFps) / 2.0; // Running average
 		visualizeFps(oldFps);
-		/*if (oldFps > 60.0) {
-			visualizeFps(oldFps);
-		}
-		else {
-			visualizeFps(oldFps);
-		}*/
 
-		/*std::cout << std::fixed
-			<< gyro.ts << " " << gyro.lastTs << " "
-			<< gyro.dt << ": ("
-			<< gyro.x << ","
-			<< gyro.y << ","
-			<< gyro.z << " )"
-			<< accel.dt << ": ("
-			<< accel.x << " "
-			<< accel.y << " "
-			<< accel.z << ")"
-			<< std::endl;*/
 	}
-	// poll for frames (gyro, accel)
-	// if depth and image available, fetch depth and image
-	// set first stable frame as reference
-	// align depth with image
-	// feature extraction
-	// feature matching
-	// pose estimation
 	return 0;
 }
 
-int Rslam::solveStereoSurf(cv::Mat ir1, cv::Mat ir2) {
-	d_ir1.upload(ir1); //first cuda call is always slow
-	d_ir2.upload(ir2);
-	surf(d_ir1, cv::cuda::GpuMat(), d_keypointsIr1, d_descriptorsIr1);
-	surf(d_ir2, cv::cuda::GpuMat(), d_keypointsIr2, d_descriptorsIr2);
-	surf.downloadKeypoints(d_keypointsIr1, keypointsIr1);
-	surf.downloadKeypoints(d_keypointsIr2, keypointsIr2);
+int Rslam::matchAndPose(Device& device) {
+	if (!device.keyframeExist) {
+		device.currentKeyframe->im = device.infrared1.clone();
+		device.currentKeyframe->d_im.upload(device.currentKeyframe->im);
+		device.currentKeyframe->keypoints = device.keypointsIr1;
+		device.currentKeyframe->d_descriptors = device.d_descriptorsIr1.clone();
+		device.keyframeExist = true;
+	}
+	else {
+		relativeMatchingDefaultStereo(device, device.currentKeyframe, device.infrared1);
+		solveRelativePose(device, device.currentKeyframe);
+	}
+	return 0;
+}
 
-	if ((d_keypointsIr1.empty() || d_keypointsIr2.empty()) || (d_descriptorsIr1.cols <= 1) || (d_descriptorsIr2.cols <= 1)) {
+int Rslam::detectAndComputeOrb(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors) {
+	d_im.upload(im);
+	orb->detectAndCompute(d_im, cv::cuda::GpuMat(), keypoints, descriptors);
+	//orb->compute(d_ir1, keypoints, descriptors);
+	return 0;
+}
+
+int Rslam::relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv::Mat currentFrame) {
+	if ((device.keypointsIr1.empty() || keyframe->keypoints.empty()) || (device.d_descriptorsIr1.cols <= 1) || (keyframe->d_descriptors.cols <= 1)) {
 		std::cout << "No keypoints found." << std::endl;
 	}
 	else {
-		matcher->knnMatch(d_descriptorsIr1, d_descriptorsIr2, matches, 2);
-		if (!matches.empty()) {
-			stereoKeypointsIr1 = std::vector< cv::KeyPoint >();
-			stereoKeypointsIr2 = std::vector< cv::KeyPoint >();
-			stereoKeypointsIr1.clear();
-			stereoKeypointsIr2.clear();
-			stereoPointsIr1 = std::vector<cv::Point2f>();
-			stereoPointsIr2 = std::vector<cv::Point2f>();
-			stereoPointsIr1.clear();
-			stereoPointsIr2.clear();
-			stereoDistances = std::vector< float >();
-			stereoDistances.clear();
-			for (int k = 0; k < (int)matches.size(); k++)
-			{
-				if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
-				{
-					stereoKeypointsIr1.push_back(keypointsIr1[matches[k][0].queryIdx]);
-					stereoKeypointsIr2.push_back(keypointsIr2[matches[k][0].trainIdx]);
-					stereoPointsIr1.push_back(keypointsIr1[matches[k][0].queryIdx].pt);
-					stereoPointsIr2.push_back(keypointsIr2[matches[k][0].trainIdx].pt);
-					stereoDistances.push_back(matches[k][0].distance);
-				}
-			}
-		}
-	}
-	return 0;
-}
-
-int Rslam::solveStereoOrb(cv::Mat ir1, cv::Mat ir2) {
-	d_ir1.upload(ir1); //first cuda call is always slow
-	d_ir2.upload(ir2);
-
-	/*orb->detect(d_ir1, keypointsIr1);
-	orb->compute(d_ir1, keypointsIr1, d_descriptorsIr1);
-
-	orb->detect(d_ir2, keypointsIr2);
-	orb->compute(d_ir2, keypointsIr2, d_descriptorsIr2);*/
-	orb->detectAndCompute(d_ir1, cv::cuda::GpuMat(), keypointsIr1, d_descriptorsIr1);
-	orb->detectAndCompute(d_ir2, cv::cuda::GpuMat(), keypointsIr2, d_descriptorsIr2);
-	//d_descriptorsIr1.download(descriptorsIr1);
-	//d_descriptorsIr2.download(descriptorsIr2);
-
-	if ((keypointsIr1.empty() || keypointsIr2.empty()) || (d_descriptorsIr1.cols <= 1) || (d_descriptorsIr2.cols <= 1)) {
-		std::cout << "No keypoints found." << std::endl;
-	}
-	else {
-		matcher->knnMatch(d_descriptorsIr1, d_descriptorsIr2, matches, 2);
-		if (!matches.empty()) {
-			stereoKeypointsIr1 = std::vector< cv::KeyPoint >();
-			stereoKeypointsIr2 = std::vector< cv::KeyPoint >();
-			stereoKeypointsIr1.clear();
-			stereoKeypointsIr2.clear();
-			stereoPointsIr1 = std::vector<cv::Point2f>();
-			stereoPointsIr2 = std::vector<cv::Point2f>();
-			stereoPointsIr1.clear();
-			stereoPointsIr2.clear();
-			stereoDistances = std::vector< float >();
-			stereoDistances.clear();
-			for (int k = 0; k < (int)matches.size(); k++)
-			{
-				if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
-				{
-					stereoKeypointsIr1.push_back(keypointsIr1[matches[k][0].queryIdx]);
-					stereoKeypointsIr2.push_back(keypointsIr2[matches[k][0].trainIdx]);
-					stereoPointsIr1.push_back(keypointsIr1[matches[k][0].queryIdx].pt);
-					stereoPointsIr2.push_back(keypointsIr2[matches[k][0].trainIdx].pt);
-					stereoDistances.push_back(matches[k][0].distance);
-				}
-			}
-		}
-	}
-	return 0;
-}
-
-int Rslam::solveRelativeOrb(Keyframe *keyframe) {
-	// Recompute descriptors
-	/*if ((keyframe->keypoints.empty() || stereoKeypointsIr1.empty())) return 0;
-
-	orb->compute(keyframe->d_im, keyframe->keypoints, keyframe->d_descriptors);
-	orb->compute(d_ir1, stereoKeypointsIr1, d_descriptorsIr1);*/
-	//orb->detect(keyframe->d_im, keyframe->keypoints);
-	if (!keyframe->keypoints.empty()) {
-		orb->compute(keyframe->d_im, keyframe->keypoints, keyframe->d_descriptors);
-		//std::cout << keyframe->keypoints.size() << std::endl;
-	}
-
-	//keyframe->keypoints.clear();
-	//orb->detectAndCompute(keyframe->d_im, cv::cuda::GpuMat(), keyframe->keypoints, keyframe->d_descriptors);
-	if (!stereoKeypointsIr1.empty()) {
-		orb->compute(d_ir1, stereoKeypointsIr1, d_descriptorsIr1);
-	}
-	
-	if ((stereoKeypointsIr1.empty() || keyframe->keypoints.empty()) || (d_descriptorsIr1.cols <= 1) || (keyframe->d_descriptors.cols <= 1)) {
-		std::cout << "No keypoints found for relative pose." << std::endl;
-	}
-	else {
-		matcher->knnMatch(keyframe->d_descriptors, d_descriptorsIr1, matches, 2);
-		if (!matches.empty()) {
+		matcher->knnMatch(keyframe->d_descriptors, device.d_descriptorsIr1, device.matches, 2);
+		if (!device.matches.empty()) {
 			//std::cout << "Matches: " << matches.size() << std::endl;
 			keyframe->matchedKeypoints = std::vector< cv::KeyPoint >();
 			keyframe->matchedKeypointsSrc = std::vector< cv::KeyPoint >();
@@ -479,102 +425,70 @@ int Rslam::solveRelativeOrb(Keyframe *keyframe) {
 			keyframe->matchedDistances = std::vector< float >();
 			keyframe->matchedDistances.clear();
 
-			for (int k = 0; k < (int)matches.size(); k++)
+			keyframe->objectPointsSrc = std::vector<cv::Point3f>();
+			keyframe->objectPointsSrc.clear();
+
+			for (int k = 0; k < (int)device.matches.size(); k++)
 			{
-				if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
+				if ((device.matches[k][0].distance < 0.6*(device.matches[k][1].distance)) && ((int)device.matches[k].size() <= 2 && (int)device.matches[k].size() > 0))
 				{
-					keyframe->matchedKeypoints.push_back(keyframe->keypoints[matches[k][0].queryIdx]);
-					keyframe->matchedKeypointsSrc.push_back(stereoKeypointsIr1[matches[k][0].trainIdx]);
+					keyframe->matchedKeypoints.push_back(keyframe->keypoints[device.matches[k][0].queryIdx]);
+					keyframe->matchedKeypointsSrc.push_back(device.keypointsIr1[device.matches[k][0].trainIdx]);
 
-					keyframe->matchedPoints.push_back(keyframe->keypoints[matches[k][0].queryIdx].pt);
-					keyframe->matchedPointsSrc.push_back(stereoKeypointsIr1[matches[k][0].trainIdx].pt);
+					keyframe->matchedPoints.push_back(keyframe->keypoints[device.matches[k][0].queryIdx].pt);
+					cv::Point2f srcPt = device.keypointsIr1[device.matches[k][0].trainIdx].pt;
+					//keyframe->matchedPointsSrc.push_back(keypointsIr1[matches[k][0].trainIdx].pt);
+					keyframe->matchedPointsSrc.push_back(srcPt);
 
-					keyframe->matchedDistances.push_back(matches[k][0].distance);
+					keyframe->matchedDistances.push_back(device.matches[k][0].distance);
+
+					// Get corresponding 3D point
+					double z = ((double)device.depth.at<short>(srcPt))/255.0;
+					// Solve 3D point
+					cv::Point3f src3dpt;
+					src3dpt.x = (float)(((double)srcPt.x - device.cx) * z / device.fx);
+					src3dpt.y = (float)(((double)srcPt.y - device.cy) * z / device.fy);
+					src3dpt.z = (float) z;
+					keyframe->objectPointsSrc.push_back(src3dpt);
 				}
 			}
 		}
 		else {
 			std::cout << "No relative matches found. " << std::endl;
 		}
-
 	}
 	return 0;
 }
 
-int Rslam::solveRelativeSurf(Keyframe *keyframe) {
-	keyframe->d_im.upload(keyframe->im);
-
-	// Recompute descriptors
-	surf(keyframe->d_im, cv::cuda::GpuMat(), keyframe->keypoints, keyframe->d_descriptors, true);
-	surf(d_ir1, cv::cuda::GpuMat(), stereoKeypointsIr1, d_descriptorsIr1, true);
-	surf.downloadKeypoints(d_keypointsIr1, keypointsIr1);
-	surf.downloadKeypoints(d_keypointsIr2, keypointsIr2);
-
-	if ((stereoKeypointsIr1.empty() || keyframe->keypoints.empty()) || (d_descriptorsIr1.cols <= 1) || (keyframe->d_descriptors.cols <= 1)) {
-		std::cout << "No keypoints found for relative pose." << std::endl;
+int Rslam::solveRelativePose(Device &device, Keyframe *keyframe) {
+	//std::cout << this->intrinsic << std::endl;
+	// Solve pose of keyframe wrt to current frame
+	if (keyframe->matchedPoints.size() >= 4) {
+		cv::solvePnPRansac(keyframe->objectPointsSrc, keyframe->matchedPoints, device.intrinsic, device.distCoeffs, keyframe->R, keyframe->t);
+		//cv::solvePnP(keyframe->objectPointsSrc, keyframe->matchedPoints, this->intrinsic, this->distCoeffs, keyframe->R, keyframe->t, false);
 	}
-	else {
-		matcher->knnMatch(d_descriptorsIr1, keyframe->d_descriptors, matches, 2);
-		if (!matches.empty()) {
-			//std::cout << "Matches: " << matches.size() << std::endl;
-			keyframe->matchedKeypoints = std::vector< cv::KeyPoint >();
-			keyframe->matchedKeypointsSrc = std::vector< cv::KeyPoint >();
-			keyframe->matchedKeypoints.clear();
-			keyframe->matchedKeypointsSrc.clear();
-			keyframe->matchedPoints = std::vector<cv::Point2f>();
-			keyframe->matchedPointsSrc = std::vector<cv::Point2f>();
-			keyframe->matchedPoints.clear();
-			keyframe->matchedPointsSrc.clear();
-			keyframe->matchedDistances = std::vector< float >();
-			keyframe->matchedDistances.clear();
-			for (int k = 0; k < (int)matches.size(); k++)
-			{
-				if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
-				{
-					keyframe->matchedKeypoints.push_back(keyframe->keypoints[matches[k][0].queryIdx]);
-					keyframe->matchedKeypointsSrc.push_back(stereoKeypointsIr1[matches[k][0].trainIdx]);
-					keyframe->matchedPoints.push_back(keyframe->keypoints[matches[k][0].queryIdx].pt);
-					keyframe->matchedPointsSrc.push_back(stereoKeypointsIr1[matches[k][0].trainIdx].pt);
-					keyframe->matchedDistances.push_back(matches[k][0].distance);
-				}
-			}
-		}
-		else {
-			std::cout << "No relative matches found. " << std::endl;
-		}
-
-	}
+	// Convert R and t to the current frame
 	return 0;
 }
 
-int Rslam::solveKeypointsAndDescriptors(cv::Mat im) {
-	//cv::Mat gray;
-	//cv::cvtColor(im, gray, CV_BGR2GRAY);
-	//d_im.upload(gray); //first cuda call is always slow
-	d_im.upload(im); //first cuda call is always slow
-	surf(d_im, cv::cuda::GpuMat(), d_keypoints, d_descriptors);
-	surf.downloadKeypoints(d_keypoints, keypoints);
-	return 0;
-}
-
-int Rslam::extractGyroAndAccel() {
-	gyro.lastTs = gyro.ts;
-	auto gyroFrame = frameset.first(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+int Rslam::extractGyroAndAccel(Device &device) {
+	device.gyro.lastTs = device.gyro.ts;
+	auto gyroFrame = device.frameset.first(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
 	rs2_vector gv = gyroFrame.get_motion_data();
-	gyro.x = gv.x - GYRO_BIAS_X;
-	gyro.y = gv.y - GYRO_BIAS_Y;
-	gyro.z = gv.z - GYRO_BIAS_Z;
-	gyro.ts = gyroFrame.get_timestamp();
-	gyro.dt = (gyro.ts - gyro.lastTs) / 1000.0;
+	device.gyro.x = gv.x - GYRO_BIAS_X;
+	device.gyro.y = gv.y - GYRO_BIAS_Y;
+	device.gyro.z = gv.z - GYRO_BIAS_Z;
+	device.gyro.ts = gyroFrame.get_timestamp();
+	device.gyro.dt = (device.gyro.ts - device.gyro.lastTs) / 1000.0;
 
-	accel.lastTs = accel.ts;
-	auto accelFrame = frameset.first(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+	device.accel.lastTs = device.accel.ts;
+	auto accelFrame = device.frameset.first(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
 	rs2_vector av = accelFrame.get_motion_data();
-	accel.x = av.x;
-	accel.y = av.y;
-	accel.z = av.z;
-	accel.ts = accelFrame.get_timestamp();
-	accel.dt = (accel.ts - accel.lastTs) / 1000.0;
+	device.accel.x = av.x;
+	device.accel.y = av.y;
+	device.accel.z = av.z;
+	device.accel.ts = accelFrame.get_timestamp();
+	device.accel.dt = (device.accel.ts - device.accel.lastTs) / 1000.0;
 	//float R = sqrtf(av.x * av.x + av.y * av.y + av.z * av.z);
 	//float newRoll = acos(av.x / R);
 	//float newYaw = acos(av.y / R);
@@ -583,43 +497,33 @@ int Rslam::extractGyroAndAccel() {
 	return 0;
 }
 
-int Rslam::extractColorAndDepth() {
-	auto colorData = frameset.get_color_frame();
-	color = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)colorData.get_data(), cv::Mat::AUTO_STEP);
-	auto depthData = frameset.get_depth_frame();
-	depth = cv::Mat(cv::Size(width, height), CV_16S, (void*)depthData.get_data(), cv::Mat::AUTO_STEP);
+int Rslam::extractColorAndDepth(Device &device) {
+	auto colorData = device.frameset.get_color_frame();
+	device.color = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)colorData.get_data(), cv::Mat::AUTO_STEP);
+	auto depthData = device.frameset.get_depth_frame();
+	device.depth = cv::Mat(cv::Size(width, height), CV_16S, (void*)depthData.get_data(), cv::Mat::AUTO_STEP);
 	return 0;
 }
 
-int Rslam::extractIr() {
-	auto infrared1Data = frameset.get_infrared_frame(1);
-	infrared1 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared1Data.get_data(), cv::Mat::AUTO_STEP);
-	auto infrared2Data = frameset.get_infrared_frame(2);
-	infrared2 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared2Data.get_data(), cv::Mat::AUTO_STEP);
+int Rslam::extractIr(Device &device) {
+	auto infrared1Data = device.frameset.get_infrared_frame(1);
+	device.infrared1 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared1Data.get_data(), cv::Mat::AUTO_STEP);
+	auto infrared2Data = device.frameset.get_infrared_frame(2);
+	device.infrared2 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared2Data.get_data(), cv::Mat::AUTO_STEP);
 	return 0;
-}
-
-void Rslam::updatePose() {
-	pose.x = accel.x;
-	pose.y = accel.y;
-	pose.z = accel.z;
-	pose.rx = 0.0f;
-	pose.ry = 0.0f;
-	pose.rz = 0.0f;
-	pose.rw = 1.0f;
 }
 
 // Utilities
-void Rslam::visualizeImu() {
+void Rslam::visualizeImu(Device &device) {
 	std::ostringstream gyroValx, gyroValy, gyroValz;
-	gyroValx << std::fixed << parseDecimal(gyro.x);
-	gyroValy << std::fixed << parseDecimal(gyro.y);
-	gyroValz << std::fixed << parseDecimal(gyro.z);
+	gyroValx << std::fixed << parseDecimal(device.gyro.x);
+	gyroValy << std::fixed << parseDecimal(device.gyro.y);
+	gyroValz << std::fixed << parseDecimal(device.gyro.z);
 	//gyroDisp.setTo(cv::Scalar((gyro.x + 10) * 20, (gyro.y + 10) * 20, (gyro.z + 10) * 20));
 	gyroDisp.setTo(cv::Scalar(50, 50, 50));
-	cv::circle(gyroDisp, cv::Point(100, 100), abs(10.0*gyro.x), cv::Scalar(0, 0, 255), -1);
-	cv::circle(gyroDisp, cv::Point(300, 100), abs(10.0*gyro.y), cv::Scalar(0, 255, 0), -1);
-	cv::circle(gyroDisp, cv::Point(500, 100), abs(10.0*gyro.z), cv::Scalar(255, 0, 0), -1);
+	cv::circle(gyroDisp, cv::Point(100, 100), abs(10.0*device.gyro.x), cv::Scalar(0, 0, 255), -1);
+	cv::circle(gyroDisp, cv::Point(300, 100), abs(10.0*device.gyro.y), cv::Scalar(0, 255, 0), -1);
+	cv::circle(gyroDisp, cv::Point(500, 100), abs(10.0*device.gyro.z), cv::Scalar(255, 0, 0), -1);
 
 	cv::putText(gyroDisp, gyroValx.str(), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
 	cv::putText(gyroDisp, gyroValy.str(), cv::Point(200, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
@@ -627,14 +531,14 @@ void Rslam::visualizeImu() {
 	cv::imshow("gyro", gyroDisp);
 
 	std::ostringstream accelValx, accelValy, accelValz;
-	accelValx << std::fixed << parseDecimal(accel.x);
-	accelValy << std::fixed << parseDecimal(accel.y);
-	accelValz << std::fixed << parseDecimal(accel.z);
+	accelValx << std::fixed << parseDecimal(device.accel.x);
+	accelValy << std::fixed << parseDecimal(device.accel.y);
+	accelValz << std::fixed << parseDecimal(device.accel.z);
 	//gyroDisp.setTo(cv::Scalar((gyro.x + 10) * 20, (gyro.y + 10) * 20, (gyro.z + 10) * 20));
 	accelDisp.setTo(cv::Scalar(50, 50, 50));
-	cv::circle(accelDisp, cv::Point(100, 100), abs(5.0*accel.x), cv::Scalar(0, 0, 255), -1);
-	cv::circle(accelDisp, cv::Point(300, 100), abs(5.0*accel.y), cv::Scalar(0, 255, 0), -1);
-	cv::circle(accelDisp, cv::Point(500, 100), abs(5.0*accel.z), cv::Scalar(255, 0, 0), -1);
+	cv::circle(accelDisp, cv::Point(100, 100), abs(5.0*device.accel.x), cv::Scalar(0, 0, 255), -1);
+	cv::circle(accelDisp, cv::Point(300, 100), abs(5.0*device.accel.y), cv::Scalar(0, 255, 0), -1);
+	cv::circle(accelDisp, cv::Point(500, 100), abs(5.0*device.accel.z), cv::Scalar(255, 0, 0), -1);
 
 	cv::putText(accelDisp, accelValx.str(), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
 	cv::putText(accelDisp, accelValy.str(), cv::Point(200, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
@@ -643,62 +547,37 @@ void Rslam::visualizeImu() {
 }
 
 void Rslam::visualizePose() {
-	Viewer *viewer = new Viewer();
 	viewer->createWindow(800, 600, "pose");
 	viewer->setCameraProjectionType(Viewer::ProjectionType::PERSPECTIVE);
 
 	FileReader *objFile = new FileReader();
-	objFile->readObj("monkey.obj", FileReader::ArrayFormat::VERTEX_NORMAL_TEXTURE, 0.01f);
+	float scale = 0.005f;
+	objFile->readObj("arrow.obj", FileReader::ArrayFormat::VERTEX_NORMAL_TEXTURE, scale);
 
 	//box solid
 	//cv::Mat texture = cv::imread("texture.png");
 	CgObject *cgobject = new CgObject();
+	cgobject->objectIndex = 0;
 	cgobject->loadShader("myshader2.vert", "myshader2.frag");
 	cgobject->loadData(objFile->vertexArray, objFile->indexArray, CgObject::ArrayFormat::VERTEX_NORMAL_TEXTURE);
 	cgobject->loadTexture("default_texture.jpg");
 	cgobject->setDrawMode(CgObject::Mode::TRIANGLES);
 	viewer->cgObject->push_back(cgobject);
-
+	
 	viewer->run();
-	//viewer->depthAndVertexCapture();
 	viewer->close();
 }
 
-void Rslam::visualizeColor() {
-	//auto colorData = frameset.get_color_frame();
-	//color = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)colorData.get_data(), cv::Mat::AUTO_STEP);
-	cv::imshow("color", color);
-}
-
-void Rslam::visualizeDepth() {
-	auto depthData = frameset.get_depth_frame();
-	auto depthVisData = colorizer.colorize(depthData);
-	depthVis = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)depthVisData.get_data(), cv::Mat::AUTO_STEP);
-	cv::imshow("depth", depthVis);
-}
-
-void Rslam::visualizeKeypoints(cv::Mat im) {
-	cv::Mat imout;
-	cv::drawKeypoints(im, keypoints, imout, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-	cv::imshow("keypoints", imout);
-}
-
-void Rslam::visualizeKeypoints(cv::Mat ir1, cv::Mat ir2) {
-	cv::Mat imout1, imout2;
-	cv::drawKeypoints(ir1, keypointsIr1, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-	cv::imshow("ir1", imout1);
-	cv::drawKeypoints(ir2, keypointsIr2, imout2, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-	cv::imshow("ir2", imout1);
-}
-
-void Rslam::visualizeStereoKeypoints(cv::Mat ir1, cv::Mat ir2) {
-	cv::Mat imout1, imout2;
-	cv::drawKeypoints(ir1, stereoKeypointsIr1, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-	cv::putText(imout1, "detected keypoints: " + parseDecimal((double)keypointsIr1.size(), 0), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
-	cv::putText(imout1, "matched keypoints: " + parseDecimal((double)stereoKeypointsIr1.size(), 0), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
-	cv::imshow("ir1", imout1);
-	cv::drawKeypoints(ir2, stereoKeypointsIr2, imout2, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-	cv::imshow("ir2", imout2);
+void Rslam::updateViewerPose() {
+	if (viewer->isRunning) {
+		std::vector<CgObject*>::iterator it = viewer->cgObject->begin();
+		viewer->cgObject->at(0)->rx = -(float)Rvec.at<double>(1);
+		viewer->cgObject->at(0)->ry = (float)Rvec.at<double>(0);
+		viewer->cgObject->at(0)->rz = -(float)Rvec.at<double>(2);
+		viewer->cgObject->at(0)->tx = (float)t.at<double>(0);
+		viewer->cgObject->at(0)->ty = -(float)t.at<double>(1);
+		viewer->cgObject->at(0)->tz = -(float)t.at<double>(2);
+	}
 }
 
 void Rslam::visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir1) {
@@ -733,7 +612,23 @@ void Rslam::visualizeFps(double fps) {
 	cv::imshow("fps", im);
 }
 
-
+void Rslam::overlayMatrix(cv::Mat &im, cv::Mat R1, cv::Mat t) {
+	std::ostringstream message1, message2, message3;
+	message1 << std::fixed << this->parseDecimal(R1.at<double>(0), 2) << " " << this->parseDecimal(R1.at<double>(1), 2) << " " << this->parseDecimal(R1.at<double>(2), 2);// << " " << this->parseDecimal(t.at<double>(0));
+	message2 << std::fixed << this->parseDecimal(t.at<double>(0), 2) << " " << this->parseDecimal(t.at<double>(1), 2) << " " << this->parseDecimal(t.at<double>(2), 2);// << " " << this->parseDecimal(t.at<double>(1));
+	//message3 << std::fixed << this->parseDecimal(R1.at<double>(2, 0)) << " " << this->parseDecimal(R1.at<double>(2, 1)) << " " << this->parseDecimal(R1.at<double>(2, 2)) << " " << this->parseDecimal(t.at<double>(2));
+	cv::Mat overlay;
+	double alpha = 0.3;
+	im.copyTo(overlay);
+	cv::rectangle(overlay, cv::Rect(0, 0, 400, 47), cv::Scalar(255, 255, 255), -1);
+	cv::addWeighted(overlay, alpha, im, 1 - alpha, 0, im);
+	//cv::rectangle(im, cv::Point(0, 0), cv::Point(256, 47), CV_RGB(255, 255, 255), CV_FILLED, cv::LINE_8, 0);
+	cv::Scalar tc = CV_RGB(0, 0, 0);
+	cv::putText(im, message1.str(), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, tc);
+	cv::putText(im, message2.str(), cv::Point(0, 22), cv::FONT_HERSHEY_PLAIN, 1, tc);
+	//cv::putText(im, message3.str(), cv::Point(0, 34), cv::FONT_HERSHEY_PLAIN, 1, tc);
+	cv::imshow("pose", im);
+}
 
 
 // Tools
@@ -768,12 +663,441 @@ std::string Rslam::parseDecimal(double f, int precision) {
 }
 
 
+// Unused
+int Rslam::poseSolver() {
+	//double last_ts[RS2_STREAM_COUNT];
+	//double dt[RS2_STREAM_COUNT];
+	//std::clock_t start;
 
+	//double timer = 0.0;
+	//double fps, oldFps = 0.0;
 
+	//cv::Mat prevInfrared1 = cv::Mat::zeros(cv::Size(this->width, this->height), CV_8UC1);
+	//Keyframe * currentKeyframe = new Keyframe();
+	//bool keyframeExist = false;
 
+	//while (true) {
+	//	char pressed = cv::waitKey(10);
+	//	if (pressed == 27) break;
+	//	if (pressed == 'r') keyframeExist = false; // change this to automatic keyframing
 
+	//	bool pollSuccess = pipelines[0]->poll_for_frames(&frameset);
+	//	if (!pollSuccess) continue;
 
+	//	start = std::clock();
+	//	frameset = alignToColor.process(frameset);
+	//	//extractTimeStamps();
+	//	extractGyroAndAccel();
+	//	visualizeImu();
+	//	updatePose();
 
+	//	// Get color and depth frames
+	//	//extractColorAndDepth();
+	//	extractIr();
+
+	//	//visualizeColor();
+	//	//visualizeDepth();
+
+	//	// Solve Stereo
+	//	if (featMethod == SURF) {
+	//		solveStereoSurf(infrared1, infrared2);
+	//	}
+	//	else if (featMethod == ORB) {
+	//		solveStereoOrb(infrared1, infrared2);
+	//	}
+	//	//visualizeStereoKeypoints(infrared1, infrared2);
+
+	//	// Solve Pose
+	//	// Add keypoints from stereo that are not in the current keyframe
+	//	if (!keyframeExist) {
+	//		currentKeyframe->im = infrared1.clone();
+	//		currentKeyframe->d_im.upload(currentKeyframe->im);
+	//		currentKeyframe->keypoints = keypointsIr1;
+	//		//std::cout << "Keyframe keypoints: " << currentKeyframe->keypoints.size() << std::endl;
+	//		keyframeExist = true;
+	//	}
+	//	else {
+	//		if (featMethod == SURF) {
+	//			solveRelativeSurf(currentKeyframe);
+	//		}
+	//		else {
+	//			solveRelativeOrb(currentKeyframe);
+	//		}
+	//		visualizeRelativeKeypoints(currentKeyframe, infrared1);
+	//		//currentKeyframe->im = infrared1.clone();
+	//		//currentKeyframe->keypoints = stereoKeypointsIr1;
+	//		//currentKeyframe->keypoints = currentKeyframe->matchedKeypoints;
+	//		//std::cout << currentKeyframe->keypoints.size() << std::endl;
+	//	}
+
+	//	fps = 1 / ((std::clock() - start) / (double)CLOCKS_PER_SEC);
+	//	oldFps = (fps + oldFps) / 2.0; // Running average
+	//	visualizeFps(oldFps);
+	//	/*if (oldFps > 60.0) {
+	//		visualizeFps(oldFps);
+	//	}
+	//	else {
+	//		visualizeFps(oldFps);
+	//	}*/
+
+	//	/*std::cout << std::fixed
+	//		<< gyro.ts << " " << gyro.lastTs << " "
+	//		<< gyro.dt << ": ("
+	//		<< gyro.x << ","
+	//		<< gyro.y << ","
+	//		<< gyro.z << " )"
+	//		<< accel.dt << ": ("
+	//		<< accel.x << " "
+	//		<< accel.y << " "
+	//		<< accel.z << ")"
+	//		<< std::endl;*/
+	//}
+	//// poll for frames (gyro, accel)
+	//// if depth and image available, fetch depth and image
+	//// set first stable frame as reference
+	//// align depth with image
+	//// feature extraction
+	//// feature matching
+	//// pose estimation
+	//return 0;
+}
+
+int Rslam::poseSolverDefaultStereo() {
+	//try {
+	//	double last_ts[RS2_STREAM_COUNT];
+	//	double dt[RS2_STREAM_COUNT];
+	//	std::clock_t start;
+
+	//	double timer = 0.0;
+	//	double fps, oldFps = 0.0;
+
+	//	cv::Mat prevInfrared1 = cv::Mat::zeros(cv::Size(this->width, this->height), CV_8UC1);
+	//	Keyframe * currentKeyframe = new Keyframe();
+	//	bool keyframeExist = false;
+	//	currentKeyframe->R = cv::Mat::zeros(3, 1, CV_64F);
+	//	currentKeyframe->t = cv::Mat::zeros(3, 1, CV_64F);
+	//	std::cout << "Pose Solver thread started: " << pipelines.size() << std::endl;
+	//	while (true) {
+	//		char pressed = cv::waitKey(10);
+	//		if (pressed == 27) break;
+	//		if (pressed == 'r') keyframeExist = false; // change this to automatic keyframing
+
+	//		//bool pollSuccess = pipelines[0]->poll_for_frames(&frameset);
+	//		bool pollSuccess = device0.pipe->poll_for_frames(&device0.frameset);
+	//		//std::cout << pollSuccess;
+	//		if (!pollSuccess) continue;
+
+	//		start = std::clock();
+	//		device0.frameset = alignToColor.process(device0.frameset);
+	//		extractGyroAndAccel(device0);
+
+	//		//visualizeImu();
+
+	//		// Get color and depth frames
+	//		extractColorAndDepth(device0);
+	//		extractIr(device0);
+	//		//visualizeColor();
+	//		//visualizeDepth();
+
+	//		// Solve current frame keypoints nad descriptors
+	//		detectAndComputeOrb(device0.infrared1, device0.d_ir1, device0.keypointsIr1, device0.d_descriptorsIr1);
+
+	//		// Match with keyframe
+	//		if (!keyframeExist) {
+	//			currentKeyframe->im = device0.infrared1.clone();
+	//			currentKeyframe->d_im.upload(currentKeyframe->im);
+	//			currentKeyframe->keypoints = device0.keypointsIr1;
+	//			currentKeyframe->d_descriptors = device0.d_descriptorsIr1.clone();
+	//			keyframeExist = true;
+	//		}
+	//		else {
+	//			/*if (featMethod == SURF) {
+	//				solveRelativeSurf(currentKeyframe);
+	//			}
+	//			else {
+	//				relativeMatchingDefaultStereo(currentKeyframe, infrared1);
+	//			}*/
+	//			relativeMatchingDefaultStereo(device0, currentKeyframe, device0.infrared1);
+	//			//visualizeRelativeKeypoints(currentKeyframe, infrared1);
+	//			solveRelativePose(device0, currentKeyframe);
+
+	//			device0.Rvec = currentKeyframe->R;
+	//			device0.t = currentKeyframe->t;
+	//			updateViewerPose();
+	//		}
+
+	//		fps = 1 / ((std::clock() - start) / (double)CLOCKS_PER_SEC);
+	//		oldFps = (fps + oldFps) / 2.0; // Running average
+	//		visualizeFps(oldFps);
+
+	//	}
+	//}
+	//catch (const rs2::error & e)
+	//{
+	//	std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+	//	return EXIT_FAILURE;
+	//}
+	//catch (const std::exception& e)
+	//{
+	//	std::cerr << e.what() << std::endl;
+	//	return EXIT_FAILURE;
+	//}
+	return EXIT_SUCCESS;
+}
+
+void Rslam::visualizeStereoKeypoints(cv::Mat ir1, cv::Mat ir2) {
+	/*cv::Mat imout1, imout2;
+	cv::drawKeypoints(ir1, stereoKeypointsIr1, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::putText(imout1, "detected keypoints: " + parseDecimal((double)keypointsIr1.size(), 0), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
+	cv::putText(imout1, "matched keypoints: " + parseDecimal((double)stereoKeypointsIr1.size(), 0), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
+	cv::imshow("ir1", imout1);
+	cv::drawKeypoints(ir2, stereoKeypointsIr2, imout2, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::imshow("ir2", imout2);*/
+}
+
+void Rslam::visualizeColor(Device &device) {
+	////auto colorData = frameset.get_color_frame();
+	////color = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)colorData.get_data(), cv::Mat::AUTO_STEP);
+	cv::imshow(device.id + "color", device.color);
+}
+
+void Rslam::visualizeDepth(Device &device) {
+	auto depthData = device.frameset.get_depth_frame();
+	auto depthVisData = colorizer.colorize(depthData);
+	device.depthVis = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)depthVisData.get_data(), cv::Mat::AUTO_STEP);
+	cv::imshow(device.id + "depth", device.depthVis);
+}
+
+void Rslam::visualizeKeypoints(cv::Mat im) {
+	/*cv::Mat imout;
+	cv::drawKeypoints(im, keypoints, imout, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::imshow("keypoints", imout);*/
+}
+
+void Rslam::visualizeKeypoints(cv::Mat ir1, cv::Mat ir2) {
+	/*cv::Mat imout1, imout2;
+	cv::drawKeypoints(ir1, keypointsIr1, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::imshow("ir1", imout1);
+	cv::drawKeypoints(ir2, keypointsIr2, imout2, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+	cv::imshow("ir2", imout1);*/
+}
+
+void Rslam::updatePose() {
+	/*pose.x = accel.x;
+	pose.y = accel.y;
+	pose.z = accel.z;
+	pose.rx = 0.0f;
+	pose.ry = 0.0f;
+	pose.rz = 0.0f;
+	pose.rw = 1.0f;*/
+}
+
+int Rslam::solveStereoSurf(cv::Mat ir1, cv::Mat ir2) {
+	//d_ir1.upload(ir1); //first cuda call is always slow
+	//d_ir2.upload(ir2);
+	//surf(d_ir1, cv::cuda::GpuMat(), d_keypointsIr1, d_descriptorsIr1);
+	//surf(d_ir2, cv::cuda::GpuMat(), d_keypointsIr2, d_descriptorsIr2);
+	//surf.downloadKeypoints(d_keypointsIr1, keypointsIr1);
+	//surf.downloadKeypoints(d_keypointsIr2, keypointsIr2);
+
+	//if ((d_keypointsIr1.empty() || d_keypointsIr2.empty()) || (d_descriptorsIr1.cols <= 1) || (d_descriptorsIr2.cols <= 1)) {
+	//	std::cout << "No keypoints found." << std::endl;
+	//}
+	//else {
+	//	matcher->knnMatch(d_descriptorsIr1, d_descriptorsIr2, matches, 2);
+	//	if (!matches.empty()) {
+	//		stereoKeypointsIr1 = std::vector< cv::KeyPoint >();
+	//		stereoKeypointsIr2 = std::vector< cv::KeyPoint >();
+	//		stereoKeypointsIr1.clear();
+	//		stereoKeypointsIr2.clear();
+	//		stereoPointsIr1 = std::vector<cv::Point2f>();
+	//		stereoPointsIr2 = std::vector<cv::Point2f>();
+	//		stereoPointsIr1.clear();
+	//		stereoPointsIr2.clear();
+	//		stereoDistances = std::vector< float >();
+	//		stereoDistances.clear();
+	//		for (int k = 0; k < (int)matches.size(); k++)
+	//		{
+	//			if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
+	//			{
+	//				stereoKeypointsIr1.push_back(keypointsIr1[matches[k][0].queryIdx]);
+	//				stereoKeypointsIr2.push_back(keypointsIr2[matches[k][0].trainIdx]);
+	//				stereoPointsIr1.push_back(keypointsIr1[matches[k][0].queryIdx].pt);
+	//				stereoPointsIr2.push_back(keypointsIr2[matches[k][0].trainIdx].pt);
+	//				stereoDistances.push_back(matches[k][0].distance);
+	//			}
+	//		}
+	//	}
+	//}
+	return 0;
+}
+
+int Rslam::solveStereoOrb(cv::Mat ir1, cv::Mat ir2) {
+	//d_ir1.upload(ir1); //first cuda call is always slow
+	//d_ir2.upload(ir2);
+
+	///*orb->detect(d_ir1, keypointsIr1);
+	//orb->compute(d_ir1, keypointsIr1, d_descriptorsIr1);
+
+	//orb->detect(d_ir2, keypointsIr2);
+	//orb->compute(d_ir2, keypointsIr2, d_descriptorsIr2);*/
+	//orb->detectAndCompute(d_ir1, cv::cuda::GpuMat(), keypointsIr1, d_descriptorsIr1);
+	//orb->detectAndCompute(d_ir2, cv::cuda::GpuMat(), keypointsIr2, d_descriptorsIr2);
+	////d_descriptorsIr1.download(descriptorsIr1);
+	////d_descriptorsIr2.download(descriptorsIr2);
+
+	//if ((keypointsIr1.empty() || keypointsIr2.empty()) || (d_descriptorsIr1.cols <= 1) || (d_descriptorsIr2.cols <= 1)) {
+	//	std::cout << "No keypoints found." << std::endl;
+	//}
+	//else {
+	//	matcher->knnMatch(d_descriptorsIr1, d_descriptorsIr2, matches, 2);
+	//	if (!matches.empty()) {
+	//		stereoKeypointsIr1 = std::vector< cv::KeyPoint >();
+	//		stereoKeypointsIr2 = std::vector< cv::KeyPoint >();
+	//		stereoKeypointsIr1.clear();
+	//		stereoKeypointsIr2.clear();
+	//		stereoPointsIr1 = std::vector<cv::Point2f>();
+	//		stereoPointsIr2 = std::vector<cv::Point2f>();
+	//		stereoPointsIr1.clear();
+	//		stereoPointsIr2.clear();
+	//		stereoDistances = std::vector< float >();
+	//		stereoDistances.clear();
+	//		for (int k = 0; k < (int)matches.size(); k++)
+	//		{
+	//			if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
+	//			{
+	//				stereoKeypointsIr1.push_back(keypointsIr1[matches[k][0].queryIdx]);
+	//				stereoKeypointsIr2.push_back(keypointsIr2[matches[k][0].trainIdx]);
+	//				stereoPointsIr1.push_back(keypointsIr1[matches[k][0].queryIdx].pt);
+	//				stereoPointsIr2.push_back(keypointsIr2[matches[k][0].trainIdx].pt);
+	//				stereoDistances.push_back(matches[k][0].distance);
+	//			}
+	//		}
+	//	}
+	//}
+	return 0;
+}
+
+int Rslam::solveRelativeOrb(Keyframe *keyframe) {
+	//// Recompute descriptors
+	///*if ((keyframe->keypoints.empty() || stereoKeypointsIr1.empty())) return 0;
+
+	//orb->compute(keyframe->d_im, keyframe->keypoints, keyframe->d_descriptors);
+	//orb->compute(d_ir1, stereoKeypointsIr1, d_descriptorsIr1);*/
+	////orb->detect(keyframe->d_im, keyframe->keypoints);
+	//if (!keyframe->keypoints.empty()) {
+
+	//	orb->compute(keyframe->d_im, keyframe->keypoints, keyframe->d_descriptors);
+	//	//std::cout << keyframe->keypoints.size() << std::endl;
+	//}
+
+	////keyframe->keypoints.clear();
+	////orb->detectAndCompute(keyframe->d_im, cv::cuda::GpuMat(), keyframe->keypoints, keyframe->d_descriptors);
+	//if (!stereoKeypointsIr1.empty()) {
+	//	orb->compute(d_ir1, stereoKeypointsIr1, d_descriptorsIr1);
+	//}
+
+	//if ((stereoKeypointsIr1.empty() || keyframe->keypoints.empty()) || (d_descriptorsIr1.cols <= 1) || (keyframe->d_descriptors.cols <= 1)) {
+	//	std::cout << "No keypoints found for relative pose." << std::endl;
+	//}
+	//else {
+	//	matcher->knnMatch(keyframe->d_descriptors, d_descriptorsIr1, matches, 2);
+	//	if (!matches.empty()) {
+	//		//std::cout << "Matches: " << matches.size() << std::endl;
+	//		keyframe->matchedKeypoints = std::vector< cv::KeyPoint >();
+	//		keyframe->matchedKeypointsSrc = std::vector< cv::KeyPoint >();
+	//		keyframe->matchedKeypoints.clear();
+	//		keyframe->matchedKeypointsSrc.clear();
+
+	//		keyframe->matchedPoints = std::vector<cv::Point2f>();
+	//		keyframe->matchedPointsSrc = std::vector<cv::Point2f>();
+	//		keyframe->matchedPoints.clear();
+	//		keyframe->matchedPointsSrc.clear();
+
+	//		keyframe->matchedDistances = std::vector< float >();
+	//		keyframe->matchedDistances.clear();
+
+	//		for (int k = 0; k < (int)matches.size(); k++)
+	//		{
+	//			if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
+	//			{
+	//				keyframe->matchedKeypoints.push_back(keyframe->keypoints[matches[k][0].queryIdx]);
+	//				keyframe->matchedKeypointsSrc.push_back(stereoKeypointsIr1[matches[k][0].trainIdx]);
+
+	//				keyframe->matchedPoints.push_back(keyframe->keypoints[matches[k][0].queryIdx].pt);
+	//				keyframe->matchedPointsSrc.push_back(stereoKeypointsIr1[matches[k][0].trainIdx].pt);
+
+	//				keyframe->matchedDistances.push_back(matches[k][0].distance);
+	//			}
+	//		}
+	//	}
+	//	else {
+	//		std::cout << "No relative matches found. " << std::endl;
+	//	}
+
+	//}
+	return 0;
+}
+
+int Rslam::detectAndComputeSurf(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors) {
+	return 0;
+}
+
+int Rslam::solveRelativeSurf(Keyframe *keyframe) {
+	//keyframe->d_im.upload(keyframe->im);
+
+	//// Recompute descriptors
+	//surf(keyframe->d_im, cv::cuda::GpuMat(), keyframe->keypoints, keyframe->d_descriptors, true);
+	//surf(d_ir1, cv::cuda::GpuMat(), stereoKeypointsIr1, d_descriptorsIr1, true);
+	//surf.downloadKeypoints(d_keypointsIr1, keypointsIr1);
+	//surf.downloadKeypoints(d_keypointsIr2, keypointsIr2);
+
+	//if ((stereoKeypointsIr1.empty() || keyframe->keypoints.empty()) || (d_descriptorsIr1.cols <= 1) || (keyframe->d_descriptors.cols <= 1)) {
+	//	std::cout << "No keypoints found for relative pose." << std::endl;
+	//}
+	//else {
+	//	matcher->knnMatch(d_descriptorsIr1, keyframe->d_descriptors, matches, 2);
+	//	if (!matches.empty()) {
+	//		//std::cout << "Matches: " << matches.size() << std::endl;
+	//		keyframe->matchedKeypoints = std::vector< cv::KeyPoint >();
+	//		keyframe->matchedKeypointsSrc = std::vector< cv::KeyPoint >();
+	//		keyframe->matchedKeypoints.clear();
+	//		keyframe->matchedKeypointsSrc.clear();
+	//		keyframe->matchedPoints = std::vector<cv::Point2f>();
+	//		keyframe->matchedPointsSrc = std::vector<cv::Point2f>();
+	//		keyframe->matchedPoints.clear();
+	//		keyframe->matchedPointsSrc.clear();
+	//		keyframe->matchedDistances = std::vector< float >();
+	//		keyframe->matchedDistances.clear();
+	//		for (int k = 0; k < (int)matches.size(); k++)
+	//		{
+	//			if ((matches[k][0].distance < 0.6*(matches[k][1].distance)) && ((int)matches[k].size() <= 2 && (int)matches[k].size() > 0))
+	//			{
+	//				keyframe->matchedKeypoints.push_back(keyframe->keypoints[matches[k][0].queryIdx]);
+	//				keyframe->matchedKeypointsSrc.push_back(stereoKeypointsIr1[matches[k][0].trainIdx]);
+	//				keyframe->matchedPoints.push_back(keyframe->keypoints[matches[k][0].queryIdx].pt);
+	//				keyframe->matchedPointsSrc.push_back(stereoKeypointsIr1[matches[k][0].trainIdx].pt);
+	//				keyframe->matchedDistances.push_back(matches[k][0].distance);
+	//			}
+	//		}
+	//	}
+	//	else {
+	//		std::cout << "No relative matches found. " << std::endl;
+	//	}
+
+	//}
+	return 0;
+}
+
+int Rslam::solveKeypointsAndDescriptors(cv::Mat im) {
+	////cv::Mat gray;
+	////cv::cvtColor(im, gray, CV_BGR2GRAY);
+	////d_im.upload(gray); //first cuda call is always slow
+	//d_im.upload(im); //first cuda call is always slow
+	//surf(d_im, cv::cuda::GpuMat(), d_keypoints, d_descriptors);
+	//surf.downloadKeypoints(d_keypoints, keypoints);
+	//return 0;
+}
 
 
 
@@ -880,14 +1204,14 @@ int Rslam::testViewerSimple() {
 
 
 int Rslam::getFrames() {
-	rs2::pipeline pipe;
+	/*rs2::pipeline pipe;
 	frameset = pipe.wait_for_frames();
 	frameset = alignToColor.process(frameset);
 	auto depthData = frameset.get_depth_frame();
 	auto colorData = frameset.get_color_frame();
 	auto depthVisData = colorizer.colorize(depthData);
 	depthVis = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)depthVisData.get_data(), cv::Mat::AUTO_STEP);
-	color = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)colorData.get_data(), cv::Mat::AUTO_STEP);
+	color = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)colorData.get_data(), cv::Mat::AUTO_STEP);*/
 	return 0;
 }
 
@@ -896,21 +1220,21 @@ int Rslam::getPose(float *x, float *y, float *z, float *roll, float *pitch, floa
 }
 
 int Rslam::getGyro(float *rateRoll, float *ratePitch, float *rateYaw) {
-	rs2::pipeline pipe;
-	frameset = pipe.wait_for_frames();
-	rs2_vector gv = frameset.first(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>().get_motion_data();
-	gyro.x = gv.x - GYRO_BIAS_X;
-	gyro.y = gv.y - GYRO_BIAS_Y;
-	gyro.z = gv.z - GYRO_BIAS_Z;
-	*rateRoll = gyro.x;
-	*ratePitch = gyro.y;
-	*rateYaw = gyro.z;
-	//std::cout << gyroRatePitch << std::endl;
+	//rs2::pipeline pipe;
+	//frameset = pipe.wait_for_frames();
+	//rs2_vector gv = frameset.first(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>().get_motion_data();
+	//gyro.x = gv.x - GYRO_BIAS_X;
+	//gyro.y = gv.y - GYRO_BIAS_Y;
+	//gyro.z = gv.z - GYRO_BIAS_Z;
+	//*rateRoll = gyro.x;
+	//*ratePitch = gyro.y;
+	//*rateYaw = gyro.z;
+	////std::cout << gyroRatePitch << std::endl;
 	return 0;
 }
 
 int Rslam::testStream() {
-	while (cv::waitKey(1) < 0)
+	/*while (cv::waitKey(1) < 0)
 	{
 		getFrames();
 		cv::imshow("depth", depthVis);
@@ -918,74 +1242,74 @@ int Rslam::testStream() {
 		cv::Mat combined;
 		cv::addWeighted(depthVis, 0.5, color, 0.5, 0.0, combined);
 		cv::imshow("combined", combined);
-	}
+	}*/
 	return 0;
 }
 
 int Rslam::testImu() {
-	rs2::pipeline pipe;
-	rs2::config cfg;
-	cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F);
-	cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F);
-	pipe.start(cfg);
+	//rs2::pipeline pipe;
+	//rs2::config cfg;
+	//cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F);
+	//cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F);
+	//pipe.start(cfg);
 
-	double last_ts[RS2_STREAM_COUNT];
-	double dt[RS2_STREAM_COUNT];
+	//double last_ts[RS2_STREAM_COUNT];
+	//double dt[RS2_STREAM_COUNT];
 
-	cv::Mat imDisp = cv::Mat::zeros(480, 848, CV_8UC3);
-	cv::Scalar textColor = CV_RGB(255, 255, 255);
+	//cv::Mat imDisp = cv::Mat::zeros(480, 848, CV_8UC3);
+	//cv::Scalar textColor = CV_RGB(255, 255, 255);
 
-	while (cv::waitKey(1) < 0) {
-		//frameset = pipe.wait_for_frames();
-		if (!pipe.poll_for_frames(&frameset)) {
-			continue;
-		}
+	//while (cv::waitKey(1) < 0) {
+	//	//frameset = pipe.wait_for_frames();
+	//	if (!pipe.poll_for_frames(&frameset)) {
+	//		continue;
+	//	}
 
-		for (auto f : frameset)
-		{
-			rs2::stream_profile profile = f.get_profile();
+	//	for (auto f : frameset)
+	//	{
+	//		rs2::stream_profile profile = f.get_profile();
 
-			unsigned long fnum = f.get_frame_number();
-			double ts = f.get_timestamp();
-			dt[profile.stream_type()] = (ts - last_ts[profile.stream_type()]) / 1000.0;
-			last_ts[profile.stream_type()] = ts;
+	//		unsigned long fnum = f.get_frame_number();
+	//		double ts = f.get_timestamp();
+	//		dt[profile.stream_type()] = (ts - last_ts[profile.stream_type()]) / 1000.0;
+	//		last_ts[profile.stream_type()] = ts;
 
-			/*std::cout << std::setprecision(12)
-				<< "[ " << profile.stream_name()
-				<< " ts: " << ts
-				<< " dt: " << dt[profile.stream_type()]
-				<< "] ";*/
-		}
+	//		/*std::cout << std::setprecision(12)
+	//			<< "[ " << profile.stream_name()
+	//			<< " ts: " << ts
+	//			<< " dt: " << dt[profile.stream_type()]
+	//			<< "] ";*/
+	//	}
 
-		auto fa = frameset.first(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F);
-		rs2::motion_frame accel = fa.as<rs2::motion_frame>();
+	//	auto fa = frameset.first(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F);
+	//	rs2::motion_frame accel = fa.as<rs2::motion_frame>();
 
-		auto fg = frameset.first(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F);
-		rs2::motion_frame gyro = fg.as<rs2::motion_frame>();
+	//	auto fg = frameset.first(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F);
+	//	rs2::motion_frame gyro = fg.as<rs2::motion_frame>();
 
-		rs2_vector gv = gyro.get_motion_data();
-		double ratePitch = gv.x - GYRO_BIAS_X;
-		double rateYaw = gv.y - GYRO_BIAS_Y;
-		double rateRoll = gv.z - GYRO_BIAS_Z;
+	//	rs2_vector gv = gyro.get_motion_data();
+	//	double ratePitch = gv.x - GYRO_BIAS_X;
+	//	double rateYaw = gv.y - GYRO_BIAS_Y;
+	//	double rateRoll = gv.z - GYRO_BIAS_Z;
 
-		if ((ratePitch > GYRO_MAX_X) || (ratePitch < GYRO_MIN_X)
-			|| (rateYaw > GYRO_MAX_Y) || (rateYaw < GYRO_MIN_Y)
-			|| (rateRoll > GYRO_MAX_Z) || (rateRoll < GYRO_MIN_Z)) {
+	//	if ((ratePitch > GYRO_MAX_X) || (ratePitch < GYRO_MIN_X)
+	//		|| (rateYaw > GYRO_MAX_Y) || (rateYaw < GYRO_MIN_Y)
+	//		|| (rateRoll > GYRO_MAX_Z) || (rateRoll < GYRO_MIN_Z)) {
 
-			std::ostringstream message1, message2, message3;
-			message1 << std::fixed << parseDecimal(rateRoll) << " "
-				<< parseDecimal(ratePitch) << " "
-				<< parseDecimal(rateYaw);
-			imDisp.setTo(cv::Scalar((rateRoll + 10) * 20, (ratePitch + 10) * 20, (rateYaw + 10) * 20));
-			cv::putText(imDisp, message1.str(), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, textColor);
-			cv::imshow("imu", imDisp);
-			//std::cout << "dt=" << dt[RS2_STREAM_GYRO]
-			//	<< " rateRoll=" << rateRoll// * 180.0 / CV_PI 
-			//	<< " ratePitch=" << ratePitch// * 180.0 / CV_PI 
-			//	<< " rateYaw=" << rateYaw// * 180.0 / CV_PI 
-			//	<< std::endl;
-		}
-	}
+	//		std::ostringstream message1, message2, message3;
+	//		message1 << std::fixed << parseDecimal(rateRoll) << " "
+	//			<< parseDecimal(ratePitch) << " "
+	//			<< parseDecimal(rateYaw);
+	//		imDisp.setTo(cv::Scalar((rateRoll + 10) * 20, (ratePitch + 10) * 20, (rateYaw + 10) * 20));
+	//		cv::putText(imDisp, message1.str(), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, textColor);
+	//		cv::imshow("imu", imDisp);
+	//		//std::cout << "dt=" << dt[RS2_STREAM_GYRO]
+	//		//	<< " rateRoll=" << rateRoll// * 180.0 / CV_PI 
+	//		//	<< " ratePitch=" << ratePitch// * 180.0 / CV_PI 
+	//		//	<< " rateYaw=" << rateYaw// * 180.0 / CV_PI 
+	//		//	<< std::endl;
+	//	}
+	//}
 	return 0;
 }
 
@@ -1109,21 +1433,21 @@ int Rslam::showDepth() {
 }
 
 int Rslam::extractTimeStamps() {
-	gyro.lastTs = gyro.ts;
-	accel.lastTs = accel.ts;
-	for (auto f : frameset)
-	{
-		rs2::stream_profile profile = f.get_profile();
-		timestamps[profile.stream_type()] = f.get_timestamp();
+	//gyro.lastTs = gyro.ts;
+	//accel.lastTs = accel.ts;
+	//for (auto f : frameset)
+	//{
+	//	rs2::stream_profile profile = f.get_profile();
+	//	timestamps[profile.stream_type()] = f.get_timestamp();
 
-		/*std::cout << std::fixed
-		<< "[ " << profile.stream_name() << "(" << profile.stream_type() << ")"
-		<< " ts: " << timestamps[profile.stream_type()]
-		<< "] ";*/
-	}
-	//std::cout << std::endl;
-	accel.ts = timestamps[RS2_STREAM_ACCEL];
-	//std::cout << std::fixed << gyro.ts << std::endl;
+	//	/*std::cout << std::fixed
+	//	<< "[ " << profile.stream_name() << "(" << profile.stream_type() << ")"
+	//	<< " ts: " << timestamps[profile.stream_type()]
+	//	<< "] ";*/
+	//}
+	////std::cout << std::endl;
+	//accel.ts = timestamps[RS2_STREAM_ACCEL];
+	////std::cout << std::fixed << gyro.ts << std::endl;
 	return 0;
 }
 

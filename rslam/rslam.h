@@ -12,6 +12,10 @@ public:
 	Rslam() {};
 	~Rslam() {};
 
+	// Global Pose
+	cv::Mat Rvec;
+	cv::Mat t;
+
 	enum Settings {
 		D435I_848_480_60,
 		D435I_640_480_60,
@@ -48,26 +52,6 @@ public:
 	float GYRO_MIN_Y = -0.2200f;
 	float GYRO_MIN_Z = -0.2496f;
 
-	rs2::pipeline * pipe;
-	rs2::context * ctx;
-
-	//rs2::context ctx;
-	//rs2::pipeline pipe = rs2::pipeline(ctx);
-	rs2::align alignToColor = rs2::align(RS2_STREAM_COLOR);
-	rs2::colorizer colorizer;
-	rs2::frameset frameset;
-
-	int height;
-	int width;
-	int fps;
-	cv::Mat depth;
-	cv::Mat depthVis;
-	cv::Mat color;
-	cv::Mat infrared1;
-	cv::Mat infrared2;
-	cv::Mat intrinsic;
-	//CameraPose* cameraPose;
-
 	double timestamps[RS2_STREAM_COUNT];
 	struct Gyro {
 		float x; //rate(dot) of rotation in x(rx)
@@ -76,7 +60,7 @@ public:
 		double ts; //timestamp
 		double lastTs;
 		double dt;
-	} gyro;
+	};
 
 	struct Accel {
 		float x;
@@ -85,7 +69,7 @@ public:
 		double ts; //timestamp
 		double lastTs;
 		double dt;
-	} accel;
+	};
 
 	struct Pose {
 		float x;
@@ -95,7 +79,121 @@ public:
 		float ry;
 		float rz;
 		float rw;
-	} pose;
+	};
+
+	rs2::context * ctx;
+
+	// For keyframing
+	class Keyframe {
+	public:
+		Keyframe() {};
+		~Keyframe() {};
+		cv::Mat im;
+		cv::cuda::GpuMat d_im;
+		std::vector<cv::KeyPoint> keypoints;
+		cv::Mat descriptors;
+		cv::cuda::GpuMat d_descriptors;
+
+		cv::Mat R;
+		cv::Mat t;
+
+		// These values change every frame
+		std::vector<cv::KeyPoint> matchedKeypoints;
+		std::vector<cv::KeyPoint> matchedKeypointsSrc;
+		std::vector<cv::Point2f> matchedPoints;
+		std::vector<cv::Point2f> matchedPointsSrc;
+		std::vector<cv::Point3f> objectPointsSrc;
+		std::vector<float> matchedDistances;
+	};
+
+	class Device {
+	public:
+		Device() {};
+		~Device() {};
+		std::string id;
+
+		rs2::pipeline * pipe;
+		rs2::frameset frameset;
+		cv::Mat depth;
+		cv::Mat color;
+		cv::Mat depthVis;
+		cv::Mat infrared1;
+		cv::Mat infrared2;
+
+		// For pose estimation
+		cv::cuda::GpuMat d_im;
+		cv::cuda::GpuMat d_ir1;
+		cv::cuda::GpuMat d_ir2;
+		cv::cuda::GpuMat d_keypoints;
+		cv::cuda::GpuMat d_descriptors;
+		cv::cuda::GpuMat d_keypointsIr1;
+		cv::cuda::GpuMat d_descriptorsIr1;
+		cv::cuda::GpuMat d_keypointsIr2;
+		cv::cuda::GpuMat d_descriptorsIr2;
+		//std::vector<cv::KeyPoint> keypoints;
+		std::vector<cv::KeyPoint> keypointsIr1;
+		std::vector<cv::KeyPoint> keypointsIr2;
+		cv::Mat descriptorsIr1;
+		cv::Mat descriptorsIr2;
+		std::vector<std::vector<cv::DMatch>> matches;
+
+		double cx;
+		double cy;
+		double fx;
+		double fy;
+		cv::Mat intrinsic;
+		cv::Mat distCoeffs;
+		cv::Mat Rvec;
+		cv::Mat t;
+
+		Keyframe * currentKeyframe;
+		bool keyframeExist;
+
+		Gyro gyro;
+		Accel accel;
+		Pose pose;
+	};
+
+	// MultiCamera fixed
+	Device device0;
+	Device device1;
+	/*rs2::pipeline * pipe0;
+	rs2::pipeline * pipe1;
+	rs2::frameset frameset0;
+	rs2::frameset frameset1;
+	cv::Mat depth0;
+	cv::Mat depthVis0;
+	cv::Mat color0;
+	cv::Mat infrared01;
+	cv::Mat infrared02;
+	cv::Mat depth1;
+	cv::Mat depthVis1;
+	cv::Mat color1;
+	cv::Mat infrared11;
+	cv::Mat infrared12;*/
+
+	// MultiCamera random
+	std::vector<rs2::pipeline*> pipelines;
+	std::vector<rs2::frameset> framesets;
+
+	// Single camera
+	//rs2::frameset frameset; // For backward compatibility
+	//cv::Mat depth;
+	//cv::Mat depthVis;
+	//cv::Mat color;
+	//cv::Mat infrared1;
+	//cv::Mat infrared2;
+
+	rs2::align alignToColor = rs2::align(RS2_STREAM_COLOR);
+	rs2::colorizer colorizer;
+	
+	int height;
+	int width;
+	int fps;
+	
+	Viewer * viewer;
+	
+	//CameraPose* cameraPose;
 
 	// For Slam
 	int minHessian;
@@ -104,7 +202,7 @@ public:
 	cv::Ptr< cv::cuda::DescriptorMatcher > matcher;
 	FeatureDetectionMethod featMethod;
 
-	cv::cuda::GpuMat d_im;
+	/*cv::cuda::GpuMat d_im;
 	cv::cuda::GpuMat d_ir1;
 	cv::cuda::GpuMat d_ir2;
 	cv::cuda::GpuMat d_keypoints;
@@ -118,7 +216,7 @@ public:
 	std::vector<cv::KeyPoint> keypointsIr2;
 	cv::Mat descriptorsIr1;
 	cv::Mat descriptorsIr2;
-	std::vector<std::vector<cv::DMatch>> matches;
+	std::vector<std::vector<cv::DMatch>> matches;*/
 
 	// For Stereo Matching
 	std::vector<cv::KeyPoint> stereoKeypointsIr1;
@@ -127,72 +225,66 @@ public:
 	std::vector<cv::Point2f> stereoPointsIr2;
 	std::vector<float> stereoDistances;
 
-	// For keyframing
-	class Keyframe {
-	public:
-		Keyframe() {};
-		~Keyframe() {};
-		cv::Mat im;
-		cv::cuda::GpuMat d_im;
-		std::vector<cv::KeyPoint> keypoints;
-		cv::Mat descriptors;
-		cv::cuda::GpuMat d_descriptors;
-		cv::Mat R;
-		cv::Mat t;
-
-		// These values change every frame
-		std::vector<cv::KeyPoint> matchedKeypoints;
-		std::vector<cv::KeyPoint> matchedKeypointsSrc;
-		std::vector<cv::Point2f> matchedPoints;
-		std::vector<cv::Point2f> matchedPointsSrc;
-		std::vector<float> matchedDistances;
-	};
 	std::vector<Keyframe> keyframes;
 
-	int solveKeypointsAndDescriptors(cv::Mat im);
-	int solveStereoSurf(cv::Mat ir1, cv::Mat ir2);
-	int solveStereoOrb(cv::Mat ir1, cv::Mat ir2);
-	int solveRelativeSurf(Keyframe * keyframe);
-	int solveRelativeOrb(Keyframe * keyframe);
+	int relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv::Mat currentFrame);
+	//int detectAndComputeOrb(Device &device);
+	int detectAndComputeOrb(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
+	int solveRelativePose(Device& device, Keyframe *keyframe);
+	int matchAndPose(Device& device);
 
 	// Functions
 	int initialize(Settings settings, FeatureDetectionMethod featMethod);
 
 private:
-	int initialize(int width, int height, int fps, double cx, double cy, double fx, double fy);
+	int initialize(int width, int height, int fps);
 	int initialize(Settings settings);
+	int setIntrinsics(Device &device, double cx, double cy, double fx, double fy);
+	int initContainers(Device &device);
 
 public:
 	int recordAll();
 	int playback(const char* serialNumber);
 	int run(); // poseSolver thread
 	int poseSolver(); // main loop for solving pose
-	int extractGyroAndAccel();
-	int extractColorAndDepth();
-	int extractIr();
+	int poseSolverDefaultStereo();
+	int poseSolverDefaultStereoMulti();
+	int extractGyroAndAccel(Device &device);
+	int extractColorAndDepth(Device &device);
+	int extractIr(Device &device);
 	int extractTimeStamps();
 
 	void updatePose();
 	int getPose(); // fetcher of current pose
 
-
-
 	// Utilities
-	void visualizeImu();
+	void visualizeImu(Device &device);
 	void visualizePose();
-	void visualizeColor();
-	void visualizeDepth();
+	void updateViewerPose();
+	void visualizeColor(Device &device);
+	void visualizeDepth(Device &device);
+	void visualizeFps(double fps);
+
 	void visualizeKeypoints(cv::Mat im);
 	void visualizeKeypoints(cv::Mat ir1, cv::Mat ir2);
 	void visualizeStereoKeypoints(cv::Mat ir1, cv::Mat ir2);
 	void visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir2);
-	void visualizeFps(double fps);
+	
 	cv::Mat gyroDisp;
 	cv::Mat accelDisp;
 
 	//Tools
 	std::string parseDecimal(double f);
 	std::string parseDecimal(double f, int precision);
+	void overlayMatrix(cv::Mat &im, cv::Mat R1, cv::Mat t);
+
+	// Unused
+	int solveKeypointsAndDescriptors(cv::Mat im);
+	int solveStereoSurf(cv::Mat ir1, cv::Mat ir2);
+	int solveStereoOrb(cv::Mat ir1, cv::Mat ir2);
+	int solveRelativeSurf(Keyframe * keyframe);
+	int solveRelativeOrb(Keyframe * keyframe);
+	int detectAndComputeSurf(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
 
 	// Tests
 	int testOrb();

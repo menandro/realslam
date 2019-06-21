@@ -76,7 +76,6 @@ int Viewer::createWindow(int scrWidth, int scrHeight, const char *windowName)
 	glEnable(GL_DEPTH_TEST);
 }
 
-
 Viewer::~Viewer()
 {
 }
@@ -169,6 +168,7 @@ void Viewer::depthEdgeAndVertexCapture() {
 
 void Viewer::run() {
 	makeCurrent();
+	isRunning = true;
 	while (!glfwWindowShouldClose(window))
 	{
 		float currentFrame = glfwGetTime();
@@ -197,7 +197,13 @@ void Viewer::run() {
 		for (std::vector<CgObject*>::iterator it = cgObject->begin(); it != cgObject->end(); ++it) {
 			(*it)->bindTexture();
 			(*it)->bindShader();
-			(*it)->setMVP(model, view, projection);
+
+			// Transform object
+			glm::mat4 rot = glm::eulerAngleYXZ((*it)->rx, (*it)->ry, (*it)->rz);
+			glm::mat4 trans = glm::translate(rot, glm::vec3((*it)->tx, (*it)->ty, (*it)->tz));
+			glm::mat4 objectModel = trans;// *rot;
+
+			(*it)->setMVP(model*objectModel, view, projection);
 			(*it)->bindBuffer();
 			(*it)->draw();
 		}
@@ -273,6 +279,7 @@ void Viewer::saveFramebuffer(std::string filename) {
 
 void Viewer::close() {
 	glfwTerminate();
+	isRunning = false;
 }
 
 //callbacks

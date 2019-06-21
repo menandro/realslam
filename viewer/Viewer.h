@@ -105,6 +105,7 @@ class CgObject {
 public:
 	CgObject();
 	~CgObject() {};
+	int objectIndex;
 	GLuint vao, vbo, ebo;
 	GLuint tex1;
 	GLfloat* vertexBuffer;
@@ -114,6 +115,11 @@ public:
 	int nVertices;
 	int nIndices;
 	GLsizei nTriangles; //nTriangles = nIndices??
+
+	// Current pose
+	float rx, ry, rz;
+	float tx, ty, tz;
+	glm::mat4 model;
 
 						//properties
 	bool isTextured;
@@ -168,6 +174,7 @@ public:
 	Viewer();
 	~Viewer();
 	void run();
+	bool isRunning = false;
 	void runOnce();
 	void captureDepth(std::string filename);
 	void depthAndVertexCapture();

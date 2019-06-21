@@ -7,6 +7,12 @@ CgObject::CgObject() {
 	drawMode = Mode::DEFAULT_MODE;
 	isTextured = false;
 	renderType = RenderType::DEFAULT_RENDER;
+	rx = 0.0f;
+	ry = 0.0f;
+	rz = 0.0f;
+	tx = 0.0f;
+	ty = 0.0f;
+	tz = 0.0f;
 }
 
 void CgObject::bindBuffer() {
