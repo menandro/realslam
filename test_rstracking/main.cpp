@@ -9,7 +9,7 @@ int main() {
 
 	// SLAM USING D435i
 	Rslam* rslam = new Rslam();
-	rslam->initialize(Rslam::D435I_IR_640_360_90, Rslam::ORB);
+	rslam->initialize(Rslam::D435I_IR_640_360_90, Rslam::ORB, "843112071357", "841612070674");
 	rslam->run();
 	//rslam->testOrb();
 	//rslam->recordAll();

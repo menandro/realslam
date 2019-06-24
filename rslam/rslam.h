@@ -5,6 +5,7 @@
 #include "lib_link.h"
 #include <viewer\Viewer.h>
 #include <filereader\Filereader.h>
+#include <upsampling/upsampling.h>
 #include <thread>
 
 class Rslam {
@@ -115,10 +116,13 @@ public:
 		rs2::pipeline * pipe;
 		rs2::frameset frameset;
 		cv::Mat depth;
+		cv::Mat depth32f;
 		cv::Mat color;
 		cv::Mat depthVis;
 		cv::Mat infrared1;
 		cv::Mat infrared2;
+		cv::Mat infrared132f;
+		cv::Mat infrared232f;
 
 		// For pose estimation
 		cv::cuda::GpuMat d_im;
@@ -157,32 +161,13 @@ public:
 	// MultiCamera fixed
 	Device device0;
 	Device device1;
-	/*rs2::pipeline * pipe0;
-	rs2::pipeline * pipe1;
-	rs2::frameset frameset0;
-	rs2::frameset frameset1;
-	cv::Mat depth0;
-	cv::Mat depthVis0;
-	cv::Mat color0;
-	cv::Mat infrared01;
-	cv::Mat infrared02;
-	cv::Mat depth1;
-	cv::Mat depthVis1;
-	cv::Mat color1;
-	cv::Mat infrared11;
-	cv::Mat infrared12;*/
+	std::string device0SN;
+	std::string device1SN;
 
 	// MultiCamera random
 	std::vector<rs2::pipeline*> pipelines;
 	std::vector<rs2::frameset> framesets;
-
-	// Single camera
-	//rs2::frameset frameset; // For backward compatibility
-	//cv::Mat depth;
-	//cv::Mat depthVis;
-	//cv::Mat color;
-	//cv::Mat infrared1;
-	//cv::Mat infrared2;
+	rs2::spatial_filter spatialFilter;
 
 	rs2::align alignToColor = rs2::align(RS2_STREAM_COLOR);
 	rs2::colorizer colorizer;
@@ -192,8 +177,9 @@ public:
 	int fps;
 	
 	Viewer * viewer;
-	
-	//CameraPose* cameraPose;
+
+	lup::Upsampling * upsampling;
+	float maxDepth;
 
 	// For Slam
 	int minHessian;
@@ -201,22 +187,6 @@ public:
 	cv::Ptr<cv::cuda::ORB> orb;
 	cv::Ptr< cv::cuda::DescriptorMatcher > matcher;
 	FeatureDetectionMethod featMethod;
-
-	/*cv::cuda::GpuMat d_im;
-	cv::cuda::GpuMat d_ir1;
-	cv::cuda::GpuMat d_ir2;
-	cv::cuda::GpuMat d_keypoints;
-	cv::cuda::GpuMat d_descriptors;
-	cv::cuda::GpuMat d_keypointsIr1;
-	cv::cuda::GpuMat d_descriptorsIr1;
-	cv::cuda::GpuMat d_keypointsIr2;
-	cv::cuda::GpuMat d_descriptorsIr2;
-	std::vector<cv::KeyPoint> keypoints;
-	std::vector<cv::KeyPoint> keypointsIr1;
-	std::vector<cv::KeyPoint> keypointsIr2;
-	cv::Mat descriptorsIr1;
-	cv::Mat descriptorsIr2;
-	std::vector<std::vector<cv::DMatch>> matches;*/
 
 	// For Stereo Matching
 	std::vector<cv::KeyPoint> stereoKeypointsIr1;
@@ -234,7 +204,7 @@ public:
 	int matchAndPose(Device& device);
 
 	// Functions
-	int initialize(Settings settings, FeatureDetectionMethod featMethod);
+	int initialize(Settings settings, FeatureDetectionMethod featMethod, std::string device0SN, std::string device1SN);
 
 private:
 	int initialize(int width, int height, int fps);
@@ -250,9 +220,11 @@ public:
 	int poseSolverDefaultStereo();
 	int poseSolverDefaultStereoMulti();
 	int extractGyroAndAccel(Device &device);
-	int extractColorAndDepth(Device &device);
+	int extractColor(Device &device);
+	int extractDepth(Device &device);
 	int extractIr(Device &device);
 	int extractTimeStamps();
+	int upsampleDepth(Device &device);
 
 	void updatePose();
 	int getPose(); // fetcher of current pose
@@ -267,6 +239,7 @@ public:
 
 	void visualizeKeypoints(cv::Mat im);
 	void visualizeKeypoints(cv::Mat ir1, cv::Mat ir2);
+	void visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir1, std::string windowNamePrefix);
 	void visualizeStereoKeypoints(cv::Mat ir1, cv::Mat ir2);
 	void visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir2);
 	
@@ -303,3 +276,10 @@ public:
 
 };
 
+
+
+
+
+
+
+// Trash codes

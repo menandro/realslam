@@ -18,10 +18,11 @@ int Rslam::initialize(int width, int height, int fps) {
 
 			std::cout << "Found devices: " << devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
 			const char * serialNo = devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-			if ((std::strcmp(serialNo, "843112071357") == 0) || (std::strcmp(serialNo, "801212070810") == 0)) {
-				std::cout << "Configurating " << serialNo << std::endl;
+			if ((std::strcmp(serialNo, this->device0SN.c_str()) == 0) || (std::strcmp(serialNo, this->device1SN.c_str()) == 0)) {
+				std::cout << "Configuring " << serialNo << std::endl;
 				// Turn off emitter
-				auto depth_sensor = dev[0].first<rs2::depth_sensor>();
+				
+				auto depth_sensor = devfound.first<rs2::depth_sensor>();
 				if (depth_sensor.supports(RS2_OPTION_EMITTER_ENABLED))
 				{
 					depth_sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.0f); // Disable emitter
@@ -33,18 +34,18 @@ int Rslam::initialize(int width, int height, int fps) {
 				cfg.enable_stream(RS2_STREAM_COLOR, this->width, this->height, RS2_FORMAT_BGR8, 60);
 				cfg.enable_stream(RS2_STREAM_INFRARED, 1, this->width, this->height, RS2_FORMAT_Y8, this->fps);
 				cfg.enable_stream(RS2_STREAM_INFRARED, 2, this->width, this->height, RS2_FORMAT_Y8, this->fps);
-				if ((std::strcmp(serialNo, "843112071357") == 0)) {
+				if ((std::strcmp(serialNo, this->device0SN.c_str()) == 0)){// || (std::strcmp(serialNo, this->device1SN.c_str()) == 0)) {
 					cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
 					cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
 				}
 				pipe->start(cfg);
 				pipelines.emplace_back(pipe);
 
-				if ((std::strcmp(serialNo, "843112071357") == 0)) {
+				if ((std::strcmp(serialNo, this->device0SN.c_str()) == 0)) {
 					device0.pipe = pipe;
 					device0.id = "device0";
 				}
-				else if ((std::strcmp(serialNo, "801212070810") == 0)) {
+				else if ((std::strcmp(serialNo, this->device1SN.c_str()) == 0)) {
 					device1.pipe = pipe;
 					device1.id = "device1";
 				}
@@ -88,17 +89,32 @@ int Rslam::initialize(int width, int height, int fps) {
 	}
 	else if (featMethod == ORB){
 		matcher = cv::cuda::DescriptorMatcher::createBFMatcher(cv::NORM_HAMMING); //for orb
-		orb = cv::cuda::ORB::create(200, 2.0f, 3);// , 10, 0, 2, 0, 10);
+		orb = cv::cuda::ORB::create(200, 2.0f, 1);// , 10, 0, 2, 0, 10);
 		//orb = cv::cuda::ORB::create(200, 2.0f, 3, 10, 0, 2, 0, 10);
 	}
 
 	initContainers(device0);
 	initContainers(device1);
+
+	// Depth upsampling
+	upsampling = new lup::Upsampling(32, 12, 32);
+	int maxIter = 50;
+	float beta = 9.0f;
+	float gamma = 0.85f;
+	float alpha0 = 17.0f;
+	float alpha1 = 1.2f;
+	float timeStepLambda = 1.0f;
+	float lambdaTgvl2 = 5.0f;
+	float maxDepth = 10.0f;
+	this->maxDepth = maxDepth;
+	upsampling->initialize(width, height, maxIter, beta, gamma, alpha0, alpha1, timeStepLambda, lambdaTgvl2, maxDepth);
 	return EXIT_SUCCESS;
 }
 
-int Rslam::initialize(Settings settings, FeatureDetectionMethod featMethod) {
+int Rslam::initialize(Settings settings, FeatureDetectionMethod featMethod, std::string device0SN, std::string device1SN) {
 	this->featMethod = featMethod;
+	this->device0SN = device0SN;
+	this->device1SN = device1SN;
 	return initialize(settings);
 }
 
@@ -178,10 +194,13 @@ int Rslam::setIntrinsics(Device &device, double cx, double cy, double fx, double
 
 int Rslam::initContainers(Device &device) {
 	device.depth = cv::Mat(this->height, this->width, CV_16S);
+	device.depth32f = cv::Mat(this->height, this->width, CV_32F);
 	device.depthVis = cv::Mat(this->height, this->width, CV_8UC3);
 	device.color = cv::Mat(this->height, this->width, CV_8UC3);
 	device.infrared1 = cv::Mat(this->height, this->width, CV_8UC1);
 	device.infrared2 = cv::Mat(this->height, this->width, CV_8UC1);
+	device.infrared132f = cv::Mat(this->height, this->width, CV_32F);
+	device.infrared232f = cv::Mat(this->height, this->width, CV_32F);
 	return 0;
 }
 
@@ -195,7 +214,7 @@ int Rslam::recordAll() {
 	/*rs2::device d435i;
 	rs2::device t265;*/
 	std::clock_t start;
-	double duration;
+//	double duration;
 	// Start pipes as recorders
 	for (auto&& dev : context.query_devices())
 	{
@@ -298,18 +317,18 @@ int Rslam::playback(const char* serialNumber) {
 
 // Thread calls
 int Rslam::run() {
-	std::thread t1(&Rslam::visualizePose, this);
+	//std::thread t1(&Rslam::visualizePose, this);
 	//std::thread t2(&Rslam::poseSolver, this);
 	//std::thread t2(&Rslam::poseSolverDefaultStereo, this);
 	std::thread t2(&Rslam::poseSolverDefaultStereoMulti, this);
-	t1.join();
+	//t1.join();
 	t2.join();
 }
 
 // Main loop for pose estimation
 int Rslam::poseSolverDefaultStereoMulti() {
-	double last_ts[RS2_STREAM_COUNT];
-	double dt[RS2_STREAM_COUNT];
+//	double last_ts[RS2_STREAM_COUNT];
+//	double dt[RS2_STREAM_COUNT];
 	std::clock_t start;
 
 	double timer = 0.0;
@@ -346,12 +365,16 @@ int Rslam::poseSolverDefaultStereoMulti() {
 		//visualizeImu();
 
 		// Get color and depth frames
-		extractColorAndDepth(device0);
-		extractColorAndDepth(device1);
+		extractDepth(device0);
 		extractIr(device0);
+		upsampleDepth(device0);
+
+		extractDepth(device1);
 		extractIr(device1);
+		upsampleDepth(device1);
+
 		//visualizeColor(device0);
-		//visualizeDepth(device1);
+		//visualizeDepth(device0);
 		
 		// Solve current frame keypoints nad descriptors
 		detectAndComputeOrb(device0.infrared1, device0.d_ir1, device0.keypointsIr1, device0.d_descriptorsIr1);
@@ -360,10 +383,10 @@ int Rslam::poseSolverDefaultStereoMulti() {
 		// Match with keyframe
 		matchAndPose(device0);
 		matchAndPose(device1);
-		//visualizeRelativeKeypoints(device0.currentKeyframe, device0.infrared1);
-		//visualizeRelativeKeypoints(device1.currentKeyframe, device1.infrared1);
+		visualizeRelativeKeypoints(device0.currentKeyframe, device0.infrared1, "dev0");
+		//visualizeRelativeKeypoints(device1.currentKeyframe, device1.infrared1, "dev1");
 
-		Device viewDevice = device1;
+		Device viewDevice = device0;
 		viewDevice.Rvec = viewDevice.currentKeyframe->R;
 		viewDevice.t = viewDevice.currentKeyframe->t;
 		this->Rvec = viewDevice.Rvec;
@@ -443,7 +466,7 @@ int Rslam::relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv:
 					keyframe->matchedDistances.push_back(device.matches[k][0].distance);
 
 					// Get corresponding 3D point
-					double z = ((double)device.depth.at<short>(srcPt))/255.0;
+					double z = ((double)device.depth.at<short>(srcPt))/256.0;
 					// Solve 3D point
 					cv::Point3f src3dpt;
 					src3dpt.x = (float)(((double)srcPt.x - device.cx) * z / device.fx);
@@ -497,19 +520,44 @@ int Rslam::extractGyroAndAccel(Device &device) {
 	return 0;
 }
 
-int Rslam::extractColorAndDepth(Device &device) {
+int Rslam::extractColor(Device &device) {
 	auto colorData = device.frameset.get_color_frame();
 	device.color = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)colorData.get_data(), cv::Mat::AUTO_STEP);
+	return 0;
+}
+
+int Rslam::extractDepth(Device &device) {
 	auto depthData = device.frameset.get_depth_frame();
+	//rs2::frame filtered = depthData;
+	//filtered = spatialFilter.process(filtered);
 	device.depth = cv::Mat(cv::Size(width, height), CV_16S, (void*)depthData.get_data(), cv::Mat::AUTO_STEP);
+	//device.depth = cv::Mat(cv::Size(width, height), CV_16S, (void*)filtered.get_data(), cv::Mat::AUTO_STEP);
 	return 0;
 }
 
 int Rslam::extractIr(Device &device) {
 	auto infrared1Data = device.frameset.get_infrared_frame(1);
 	device.infrared1 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared1Data.get_data(), cv::Mat::AUTO_STEP);
+	device.infrared1.convertTo(device.infrared132f, CV_32F, 1 / 256.0f);
+
 	auto infrared2Data = device.frameset.get_infrared_frame(2);
 	device.infrared2 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared2Data.get_data(), cv::Mat::AUTO_STEP);
+	device.infrared2.convertTo(device.infrared232f, CV_32F, 1 / 256.0f);
+	return 0;
+}
+
+int Rslam::upsampleDepth(Device &device) {
+	//std::cout << device.depth.at<short int>(320, 160) << std::endl;
+	//cv::imshow("test1", device.depth);
+	device.depth.convertTo(device.depth32f, CV_32F, 1.0f / 256.0f);
+	upsampling->copyImagesToDevice(device.infrared132f, device.depth32f);
+	upsampling->propagateColorOnly();
+	//upsampling->solve();
+	upsampling->copyImagesToHost(device.depth32f);
+	//cv::imshow("test2", device.depth32f);
+	//cv::imshow("test", device.depth32f);
+	device.depth32f.convertTo(device.depth, CV_16S, 256.0f);
+	//cv::imshow("test2", device.depth);
 	return 0;
 }
 
@@ -521,9 +569,9 @@ void Rslam::visualizeImu(Device &device) {
 	gyroValz << std::fixed << parseDecimal(device.gyro.z);
 	//gyroDisp.setTo(cv::Scalar((gyro.x + 10) * 20, (gyro.y + 10) * 20, (gyro.z + 10) * 20));
 	gyroDisp.setTo(cv::Scalar(50, 50, 50));
-	cv::circle(gyroDisp, cv::Point(100, 100), abs(10.0*device.gyro.x), cv::Scalar(0, 0, 255), -1);
-	cv::circle(gyroDisp, cv::Point(300, 100), abs(10.0*device.gyro.y), cv::Scalar(0, 255, 0), -1);
-	cv::circle(gyroDisp, cv::Point(500, 100), abs(10.0*device.gyro.z), cv::Scalar(255, 0, 0), -1);
+	cv::circle(gyroDisp, cv::Point(100, 100), (int)abs(10.0*device.gyro.x), cv::Scalar(0, 0, 255), -1);
+	cv::circle(gyroDisp, cv::Point(300, 100), (int)abs(10.0*device.gyro.y), cv::Scalar(0, 255, 0), -1);
+	cv::circle(gyroDisp, cv::Point(500, 100), (int)abs(10.0*device.gyro.z), cv::Scalar(255, 0, 0), -1);
 
 	cv::putText(gyroDisp, gyroValx.str(), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
 	cv::putText(gyroDisp, gyroValy.str(), cv::Point(200, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
@@ -536,9 +584,9 @@ void Rslam::visualizeImu(Device &device) {
 	accelValz << std::fixed << parseDecimal(device.accel.z);
 	//gyroDisp.setTo(cv::Scalar((gyro.x + 10) * 20, (gyro.y + 10) * 20, (gyro.z + 10) * 20));
 	accelDisp.setTo(cv::Scalar(50, 50, 50));
-	cv::circle(accelDisp, cv::Point(100, 100), abs(5.0*device.accel.x), cv::Scalar(0, 0, 255), -1);
-	cv::circle(accelDisp, cv::Point(300, 100), abs(5.0*device.accel.y), cv::Scalar(0, 255, 0), -1);
-	cv::circle(accelDisp, cv::Point(500, 100), abs(5.0*device.accel.z), cv::Scalar(255, 0, 0), -1);
+	cv::circle(accelDisp, cv::Point(100, 100), (int)abs(5.0*device.accel.x), cv::Scalar(0, 0, 255), -1);
+	cv::circle(accelDisp, cv::Point(300, 100), (int)abs(5.0*device.accel.y), cv::Scalar(0, 255, 0), -1);
+	cv::circle(accelDisp, cv::Point(500, 100), (int)abs(5.0*device.accel.z), cv::Scalar(255, 0, 0), -1);
 
 	cv::putText(accelDisp, accelValx.str(), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
 	cv::putText(accelDisp, accelValy.str(), cv::Point(200, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
@@ -551,7 +599,7 @@ void Rslam::visualizePose() {
 	viewer->setCameraProjectionType(Viewer::ProjectionType::PERSPECTIVE);
 
 	FileReader *objFile = new FileReader();
-	float scale = 0.005f;
+	float scale = 0.003f;
 	objFile->readObj("arrow.obj", FileReader::ArrayFormat::VERTEX_NORMAL_TEXTURE, scale);
 
 	//box solid
@@ -574,30 +622,25 @@ void Rslam::updateViewerPose() {
 		viewer->cgObject->at(0)->rx = -(float)Rvec.at<double>(1);
 		viewer->cgObject->at(0)->ry = (float)Rvec.at<double>(0);
 		viewer->cgObject->at(0)->rz = -(float)Rvec.at<double>(2);
-		viewer->cgObject->at(0)->tx = (float)t.at<double>(0);
-		viewer->cgObject->at(0)->ty = -(float)t.at<double>(1);
-		viewer->cgObject->at(0)->tz = -(float)t.at<double>(2);
+		viewer->cgObject->at(0)->tx = (float)t.at<double>(0) * 10.0f;
+		viewer->cgObject->at(0)->ty = -(float)t.at<double>(1) * 10.0f;
+		viewer->cgObject->at(0)->tz = -(float)t.at<double>(2) *10.0f;
 	}
 }
 
 void Rslam::visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir1) {
+	visualizeRelativeKeypoints(keyframe, ir1, "default");
+}
+
+void Rslam::visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir1, std::string windowNamePrefix) {
 	cv::Mat imout1, imout2;
 	cv::drawKeypoints(keyframe->im, keyframe->matchedKeypoints, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DEFAULT);
 	cv::putText(imout1, "detected keypoints: " + parseDecimal((double)keyframe->keypoints.size(), 0), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
 	cv::putText(imout1, "matched keypoints: " + parseDecimal((double)keyframe->matchedKeypoints.size(), 0), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
-	cv::imshow("keyframe", imout1);
+	cv::imshow(windowNamePrefix + "keyframe", imout1);
 	cv::drawKeypoints(ir1, keyframe->matchedKeypointsSrc, imout2, cv::Scalar(0, 0, 255), cv::DrawMatchesFlags::DEFAULT);
 	cv::putText(imout2, "matched keypoints: " + parseDecimal((double)keyframe->matchedKeypointsSrc.size(), 0), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
-	cv::imshow("currentframe", imout2);
-
-	//cv::Mat imout1 = keyframe->im.clone();
-	//cv::Mat imout2 = ir1.clone();
-	////cv::drawKeypoints(keyframe->im, keyframe->matchedKeypoints, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-	//cv::putText(imout1, "detected keypoints: " + parseDecimal((double)keyframe->keypoints.size(), 0), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
-	//cv::putText(imout1, "matched keypoints: " + parseDecimal((double)keyframe->matchedKeypoints.size(), 0), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
-	//cv::imshow("keyframe", imout1);
-	////cv::drawKeypoints(ir1, keyframe->matchedKeypointsSrc, imout2, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-	//cv::imshow("currentframe", imout2);
+	cv::imshow(windowNamePrefix + "currentframe", imout2);
 }
 
 void Rslam::visualizeFps(double fps) {
@@ -605,11 +648,31 @@ void Rslam::visualizeFps(double fps) {
 	im.setTo(cv::Scalar(50, 50, 50));
 	
 	//cv::circle(im, cv::Point(200, 200), 120, cv::Scalar(50, 50, 50), -1);
-	cv::circle(im, cv::Point(200, 200), fps*1.5, cv::Scalar(255, 255, 255), -1);
+	cv::circle(im, cv::Point(200, 200), (int)(fps*1.5), cv::Scalar(255, 255, 255), -1);
 	cv::circle(im, cv::Point(200, 200), 90, cv::Scalar(0, 0, 255), 1);
 
 	cv::putText(im, parseDecimal(fps, 1), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
 	cv::imshow("fps", im);
+}
+
+void Rslam::visualizeColor(Device &device) {
+	////auto colorData = frameset.get_color_frame();
+	////color = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)colorData.get_data(), cv::Mat::AUTO_STEP);
+	cv::imshow(device.id + "color", device.color);
+}
+
+void Rslam::visualizeDepth(Device &device) {
+	//auto depthData = device.frameset.get_depth_frame();
+	/*auto depthVisData = colorizer.colorize(device.depth);
+	device.depthVis = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)depthVisData.get_data(), cv::Mat::AUTO_STEP);
+	cv::imshow(device.id + "depth", device.depthVis);*/
+	cv::Mat cm_img0;
+	// Apply the colormap:
+	cv::Mat depth8u;
+	device.depth32f.convertTo(depth8u, CV_8UC1, 256.0f / this->maxDepth);
+	cv::applyColorMap(depth8u, cm_img0, cv::COLORMAP_JET);
+	// Show the result:
+	cv::imshow("cm_img0", cm_img0);
 }
 
 void Rslam::overlayMatrix(cv::Mat &im, cv::Mat R1, cv::Mat t) {
@@ -661,6 +724,45 @@ std::string Rslam::parseDecimal(double f, int precision) {
 	}
 	return string.str();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // Unused
@@ -855,18 +957,7 @@ void Rslam::visualizeStereoKeypoints(cv::Mat ir1, cv::Mat ir2) {
 	cv::imshow("ir2", imout2);*/
 }
 
-void Rslam::visualizeColor(Device &device) {
-	////auto colorData = frameset.get_color_frame();
-	////color = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)colorData.get_data(), cv::Mat::AUTO_STEP);
-	cv::imshow(device.id + "color", device.color);
-}
 
-void Rslam::visualizeDepth(Device &device) {
-	auto depthData = device.frameset.get_depth_frame();
-	auto depthVisData = colorizer.colorize(depthData);
-	device.depthVis = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)depthVisData.get_data(), cv::Mat::AUTO_STEP);
-	cv::imshow(device.id + "depth", device.depthVis);
-}
 
 void Rslam::visualizeKeypoints(cv::Mat im) {
 	/*cv::Mat imout;
