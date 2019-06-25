@@ -44,10 +44,12 @@ int Rslam::initialize(int width, int height, int fps) {
 				if ((std::strcmp(serialNo, this->device0SN.c_str()) == 0)) {
 					device0.pipe = pipe;
 					device0.id = "device0";
+					device0.isFound = true;
 				}
 				else if ((std::strcmp(serialNo, this->device1SN.c_str()) == 0)) {
 					device1.pipe = pipe;
 					device1.id = "device1";
+					device1.isFound = true;
 				}
 				std::cout << "Pipe created from: " << serialNo << std::endl;
 			}
@@ -55,8 +57,6 @@ int Rslam::initialize(int width, int height, int fps) {
 		//std::cout << dev.size() << std::endl;
 		//std::cout << "Found: " << dev[0].get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
 		//std::cout << "Found: " << dev[1].get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
-		
-		
 	}
 	catch (const rs2::error & e)
 	{
@@ -93,8 +93,8 @@ int Rslam::initialize(int width, int height, int fps) {
 		//orb = cv::cuda::ORB::create(200, 2.0f, 3, 10, 0, 2, 0, 10);
 	}
 
-	initContainers(device0);
-	initContainers(device1);
+	if (device0.isFound) initContainers(device0);
+	if (device0.isFound) initContainers(device1);
 
 	// Depth upsampling
 	upsampling = new lup::Upsampling(32, 12, 32);
@@ -321,8 +321,11 @@ int Rslam::run() {
 	//std::thread t2(&Rslam::poseSolver, this);
 	//std::thread t2(&Rslam::poseSolverDefaultStereo, this);
 	std::thread t2(&Rslam::poseSolverDefaultStereoMulti, this);
+	std::thread t3(&Rslam::visualizePose, this);
+
 	//t1.join();
 	t2.join();
+	t3.join();
 }
 
 // Main loop for pose estimation
@@ -341,11 +344,14 @@ int Rslam::poseSolverDefaultStereoMulti() {
 	device0.keyframeExist = false;
 	device0.currentKeyframe->R = cv::Mat::zeros(3, 1, CV_64F);
 	device0.currentKeyframe->t = cv::Mat::zeros(3, 1, CV_64F);
+	device0.imuKeyframeExist = false;
 	
 	device1.currentKeyframe = new Keyframe();
 	device1.keyframeExist = false;
 	device1.currentKeyframe->R = cv::Mat::zeros(3, 1, CV_64F);
 	device1.currentKeyframe->t = cv::Mat::zeros(3, 1, CV_64F);
+
+	bool firstFewFramesDropped = false;
 
 	while (true) {
 		char pressed = cv::waitKey(10);
@@ -353,55 +359,166 @@ int Rslam::poseSolverDefaultStereoMulti() {
 		if (pressed == 'r') {
 			device0.keyframeExist = false; // change this to automatic keyframing
 			device1.keyframeExist = false;
+			device0.imuKeyframeExist = false;
 		}
 
 		// Poll framesets multi-camera (when any is available)
-		bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset) | 
-			device1.pipe->poll_for_frames(&device1.frameset));
+		/*bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset) | 
+			device1.pipe->poll_for_frames(&device1.frameset));*/
+		bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset));
 		if (!pollSuccess) continue;
 
 		start = std::clock();
-		extractGyroAndAccel(device0);
+
+		if (!firstFewFramesDropped) {
+			extractGyroAndAccel(device0); // dump first frame 
+			firstFewFramesDropped = true;
+		}
+		else {
+			solveImuPose(device0);
+		}
 		//visualizeImu();
 
-		// Get color and depth frames
-		extractDepth(device0);
-		extractIr(device0);
-		upsampleDepth(device0);
-
-		extractDepth(device1);
-		extractIr(device1);
-		upsampleDepth(device1);
-
-		//visualizeColor(device0);
-		//visualizeDepth(device0);
+		solveCameraPose();
 		
-		// Solve current frame keypoints nad descriptors
-		detectAndComputeOrb(device0.infrared1, device0.d_ir1, device0.keypointsIr1, device0.d_descriptorsIr1);
-		detectAndComputeOrb(device1.infrared1, device1.d_ir1, device1.keypointsIr1, device1.d_descriptorsIr1);
-
-		// Match with keyframe
-		matchAndPose(device0);
-		matchAndPose(device1);
-		visualizeRelativeKeypoints(device0.currentKeyframe, device0.infrared1, "dev0");
-		//visualizeRelativeKeypoints(device1.currentKeyframe, device1.infrared1, "dev1");
-
-		Device viewDevice = device0;
-		viewDevice.Rvec = viewDevice.currentKeyframe->R;
-		viewDevice.t = viewDevice.currentKeyframe->t;
-		this->Rvec = viewDevice.Rvec;
-		this->t = viewDevice.t;
-		updateViewerPose();
-
-		cv::Mat im = cv::Mat::zeros(100, 300, CV_8UC3);
-		im.setTo(cv::Scalar(50, 50, 50));
-		overlayMatrix(im, this->Rvec, this->t);
+		updateViewerPose(device0);
 
 		fps = 1 / ((std::clock() - start) / (double)CLOCKS_PER_SEC);
 		oldFps = (fps + oldFps) / 2.0; // Running average
 		visualizeFps(oldFps);
-
 	}
+	return 0;
+}
+
+int Rslam::solveImuPose(Device &device) {
+	if (!device.imuKeyframeExist) {
+		Quaternion initialQ;
+		toQuaternion(Vector3(-(3.14159265358979f / 2.0f), 0.0f, 0.0f), initialQ);
+		device.ImuRotation = initialQ;
+		device.imuKeyframeExist = true;
+	}
+	else {
+		extractGyroAndAccel(device);
+
+		float gyroMeasError = 3.14159265358979f * (5.0f / 180.0f);
+		float beta = sqrtf(3.0f / 4.0f) * gyroMeasError;
+		float SEq_1 = device.ImuRotation.w;
+		float SEq_2 = device.ImuRotation.x;
+		float SEq_3 = device.ImuRotation.y;
+		float SEq_4 = device.ImuRotation.z;
+		float a_x = device.accel.x;
+		float a_y = device.accel.y;
+		float a_z = device.accel.z;
+		float w_x = device.gyro.x;
+		float w_y = device.gyro.y;
+		float w_z = device.gyro.z;
+
+		float norm;
+		float SEqDot_omega_1, SEqDot_omega_2, SEqDot_omega_3, SEqDot_omega_4;
+		float f_1, f_2, f_3;
+		float J_11or24, J_12or23, J_13or22, J_14or21, J_32, J_33; // objective function Jacobian element
+		float SEqHatDot_1, SEqHatDot_2, SEqHatDot_3, SEqHatDot_4;
+
+		float halfSEq_1 = 0.5f * SEq_1;
+		float halfSEq_2 = 0.5f * SEq_2;
+		float halfSEq_3 = 0.5f * SEq_3;
+		float halfSEq_4 = 0.5f * SEq_4;
+		float twoSEq_1 = 2.0f * SEq_1;
+		float twoSEq_2 = 2.0f * SEq_2;
+		float twoSEq_3 = 2.0f * SEq_3;
+
+		norm = sqrt(a_x * a_x + a_y * a_y + a_z * a_z);
+		a_x /= norm;
+		a_y /= norm;
+		a_z /= norm;
+
+		f_1 = twoSEq_2 * SEq_4 - twoSEq_1 * SEq_3 - a_x;
+		f_2 = twoSEq_1 * SEq_2 + twoSEq_3 * SEq_4 - a_y;
+		f_3 = 1.0f - twoSEq_2 * SEq_2 - twoSEq_3 * SEq_3 - a_z;
+
+		J_11or24 = twoSEq_3; // J_11 negated in matrix multiplication
+		J_12or23 = 2.0f * SEq_4;
+		J_13or22 = twoSEq_1; // J_12 negated in matrix multiplication
+		J_14or21 = twoSEq_2;
+		J_32 = 2.0f * J_14or21; // negated in matrix multiplication
+		J_33 = 2.0f * J_11or24; // negated in matrix multiplication
+
+		// Compute the gradient (matrix multiplication)
+		SEqHatDot_1 = J_14or21 * f_2 - J_11or24 * f_1;
+		SEqHatDot_2 = J_12or23 * f_1 + J_13or22 * f_2 - J_32 * f_3;
+		SEqHatDot_3 = J_12or23 * f_2 - J_33 * f_3 - J_13or22 * f_1;
+		SEqHatDot_4 = J_14or21 * f_1 + J_11or24 * f_2;
+
+		// Normalise the gradient
+		norm = sqrt(SEqHatDot_1 * SEqHatDot_1 + SEqHatDot_2 * SEqHatDot_2 + SEqHatDot_3 * SEqHatDot_3 + SEqHatDot_4 * SEqHatDot_4);
+		SEqHatDot_1 /= norm;
+		SEqHatDot_2 /= norm;
+		SEqHatDot_3 /= norm;
+		SEqHatDot_4 /= norm;
+
+		// Compute the quaternion derrivative measured by gyroscopes
+		SEqDot_omega_1 = -halfSEq_2 * w_x - halfSEq_3 * w_y - halfSEq_4 * w_z;
+		SEqDot_omega_2 = halfSEq_1 * w_x + halfSEq_3 * w_z - halfSEq_4 * w_y;
+		SEqDot_omega_3 = halfSEq_1 * w_y - halfSEq_2 * w_z + halfSEq_4 * w_x;
+		SEqDot_omega_4 = halfSEq_1 * w_z + halfSEq_2 * w_y - halfSEq_3 * w_x;
+
+		// Compute then integrate the estimated quaternion derrivative
+		SEq_1 += (SEqDot_omega_1 - (beta * SEqHatDot_1)) * (float)device.gyro.dt;
+		SEq_2 += (SEqDot_omega_2 - (beta * SEqHatDot_2)) * (float)device.gyro.dt;
+		SEq_3 += (SEqDot_omega_3 - (beta * SEqHatDot_3)) * (float)device.gyro.dt;
+		SEq_4 += (SEqDot_omega_4 - (beta * SEqHatDot_4)) * (float)device.gyro.dt;
+
+		// Normalise quaternion
+		norm = sqrt(SEq_1 * SEq_1 + SEq_2 * SEq_2 + SEq_3 * SEq_3 + SEq_4 * SEq_4);
+		SEq_1 /= norm;
+		SEq_2 /= norm;
+		SEq_3 /= norm;
+		SEq_4 /= norm;
+
+		device.ImuRotation.w = SEq_1;
+		device.ImuRotation.x = SEq_2;
+		device.ImuRotation.y = SEq_3;
+		device.ImuRotation.z = SEq_4;
+
+		//std::cout << SEq_1 << " " << SEq_2 << " " << SEq_3 << " " << SEq_4 << std::endl;
+		//std::cout << device.gyro.x << " " << device.gyro.y << " " << device.gyro.z << std::endl;
+	}
+	
+	return 0;
+}
+
+int Rslam::solveCameraPose() {
+	// Get color and depth frames
+	extractDepth(device0);
+	extractIr(device0);
+	upsampleDepth(device0);
+
+	//extractDepth(device1);
+	//extractIr(device1);
+	//upsampleDepth(device1);
+
+	//visualizeColor(device0);
+	//visualizeDepth(device0);
+
+	// Solve current frame keypoints nad descriptors
+	detectAndComputeOrb(device0.infrared1, device0.d_ir1, device0.keypointsIr1, device0.d_descriptorsIr1);
+	//detectAndComputeOrb(device1.infrared1, device1.d_ir1, device1.keypointsIr1, device1.d_descriptorsIr1);
+
+	// Match with keyframe
+	matchAndPose(device0);
+	//matchAndPose(device1);
+	visualizeRelativeKeypoints(device0.currentKeyframe, device0.infrared1, "dev0");
+	//visualizeRelativeKeypoints(device1.currentKeyframe, device1.infrared1, "dev1");
+
+	Device viewDevice = device0;
+	viewDevice.Rvec = viewDevice.currentKeyframe->R;
+	viewDevice.t = viewDevice.currentKeyframe->t;
+	this->Rvec = viewDevice.Rvec;
+	this->t = viewDevice.t;
+	cv::Mat im = cv::Mat::zeros(100, 300, CV_8UC3);
+	im.setTo(cv::Scalar(50, 50, 50));
+	overlayMatrix("pose", im, this->Rvec, this->t);
+
 	return 0;
 }
 
@@ -486,7 +603,7 @@ int Rslam::relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv:
 int Rslam::solveRelativePose(Device &device, Keyframe *keyframe) {
 	//std::cout << this->intrinsic << std::endl;
 	// Solve pose of keyframe wrt to current frame
-	if (keyframe->matchedPoints.size() >= 4) {
+	if (keyframe->matchedPoints.size() >= 15) {
 		cv::solvePnPRansac(keyframe->objectPointsSrc, keyframe->matchedPoints, device.intrinsic, device.distCoeffs, keyframe->R, keyframe->t);
 		//cv::solvePnP(keyframe->objectPointsSrc, keyframe->matchedPoints, this->intrinsic, this->distCoeffs, keyframe->R, keyframe->t, false);
 	}
@@ -494,6 +611,17 @@ int Rslam::solveRelativePose(Device &device, Keyframe *keyframe) {
 	return 0;
 }
 
+int Rslam::createImuKeyframe(Device &device) {
+	if (!device.imuKeyframeExist) {
+		device.ImuRotation.x = 0.0f;
+		device.ImuRotation.y = 0.0f;
+		device.ImuRotation.z = 0.0f;
+		device.ImuRotation.w = 1.0f;
+	}
+	return 0;
+}
+
+// Fetch Frames
 int Rslam::extractGyroAndAccel(Device &device) {
 	device.gyro.lastTs = device.gyro.ts;
 	auto gyroFrame = device.frameset.first(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
@@ -503,6 +631,17 @@ int Rslam::extractGyroAndAccel(Device &device) {
 	device.gyro.z = gv.z - GYRO_BIAS_Z;
 	device.gyro.ts = gyroFrame.get_timestamp();
 	device.gyro.dt = (device.gyro.ts - device.gyro.lastTs) / 1000.0;
+	//std::cout << std::fixed
+	//			<< device.gyro.ts << " " << device.gyro.lastTs << " "
+	//			<< device.gyro.dt << ": ("
+	//			/*<< device.gyro.x << ","
+	//			<< device.gyro.y << ","
+	//			<< device.gyro.z << " )"
+	//			<< device.accel.dt << ": ("
+	//			<< device.accel.x << " "
+	//			<< device.accel.y << " "
+	//			<< device.accel.z << ")"*/
+	//			<< std::endl;
 
 	device.accel.lastTs = device.accel.ts;
 	auto accelFrame = device.frameset.first(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
@@ -512,6 +651,8 @@ int Rslam::extractGyroAndAccel(Device &device) {
 	device.accel.z = av.z;
 	device.accel.ts = accelFrame.get_timestamp();
 	device.accel.dt = (device.accel.ts - device.accel.lastTs) / 1000.0;
+
+	//std::cout << (float)device.accel.dt << std::endl;
 	//float R = sqrtf(av.x * av.x + av.y * av.y + av.z * av.z);
 	//float newRoll = acos(av.x / R);
 	//float newYaw = acos(av.y / R);
@@ -561,6 +702,7 @@ int Rslam::upsampleDepth(Device &device) {
 	return 0;
 }
 
+
 // Utilities
 void Rslam::visualizeImu(Device &device) {
 	std::ostringstream gyroValx, gyroValy, gyroValz;
@@ -595,30 +737,107 @@ void Rslam::visualizeImu(Device &device) {
 }
 
 void Rslam::visualizePose() {
-	viewer->createWindow(800, 600, "pose");
+	viewer->createWindow(800, 600, "campose");
 	viewer->setCameraProjectionType(Viewer::ProjectionType::PERSPECTIVE);
 
 	FileReader *objFile = new FileReader();
 	float scale = 0.003f;
 	objFile->readObj("arrow.obj", FileReader::ArrayFormat::VERTEX_NORMAL_TEXTURE, scale);
 
-	//box solid
+	//Axis for Camera pose
 	//cv::Mat texture = cv::imread("texture.png");
-	CgObject *cgobject = new CgObject();
-	cgobject->objectIndex = 0;
-	cgobject->loadShader("myshader2.vert", "myshader2.frag");
-	cgobject->loadData(objFile->vertexArray, objFile->indexArray, CgObject::ArrayFormat::VERTEX_NORMAL_TEXTURE);
-	cgobject->loadTexture("default_texture.jpg");
-	cgobject->setDrawMode(CgObject::Mode::TRIANGLES);
-	viewer->cgObject->push_back(cgobject);
-	
+	CgObject *camAxis = new CgObject();
+	camAxis->objectIndex = 0;
+	camAxis->loadShader("myshader2.vert", "myshader2.frag");
+	camAxis->loadData(objFile->vertexArray, objFile->indexArray, CgObject::ArrayFormat::VERTEX_NORMAL_TEXTURE);
+	camAxis->loadTexture("axiscolor.png");
+	camAxis->setDrawMode(CgObject::Mode::TRIANGLES);
+	camAxis->setLight();
+	viewer->cgObject->push_back(camAxis);
+
+	//Axis for IMU pose
+	//cv::Mat texture = cv::imread("texture.png");
+	CgObject *imuAxis = new CgObject();
+	imuAxis->objectIndex = 0;
+	imuAxis->loadShader("myshader2.vert", "myshader2.frag");
+	imuAxis->loadData(objFile->vertexArray, objFile->indexArray, CgObject::ArrayFormat::VERTEX_NORMAL_TEXTURE);
+	imuAxis->loadTexture("imuaxiscolor.png");
+	imuAxis->setDrawMode(CgObject::Mode::TRIANGLES);
+	imuAxis->setLight();
+	viewer->cgObject->push_back(imuAxis);
+
 	viewer->run();
 	viewer->close();
 }
 
-void Rslam::updateViewerPose() {
+void Rslam::toEuler(Quaternion q, Vector3 &euler)
+{
+	// roll (x-axis rotation)
+	float sinr_cosp = +2.0f * (q.w * q.x + q.y * q.z);
+	float cosr_cosp = +1.0f - 2.0f * (q.x * q.x + q.y * q.y);
+	euler.x = atan2(sinr_cosp, cosr_cosp);
+
+	// pitch (y-axis rotation)
+	float sinp = 2.0f * (q.w * q.y - q.z * q.x);
+	if (fabs(sinp) >= 1.0f)
+		euler.y = copysign(3.14159f / 2.0f, sinp); // use 90 degrees if out of range
+	else
+		euler.y = asin(sinp);
+
+	// yaw (z-axis rotation)
+	float siny_cosp = 2.0f * (q.w * q.z + q.x * q.y);
+	float cosy_cosp = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
+	euler.z = atan2(siny_cosp, cosy_cosp);
+}
+
+void Rslam::toQuaternion(Vector3 euler, Quaternion &q) // yaw (Z), pitch (Y), roll (X)
+{
+	// Abbreviations for the various angular functions
+	double cy = cos(euler.z * 0.5);
+	double sy = sin(euler.z * 0.5);
+	double cp = cos(euler.y * 0.5);
+	double sp = sin(euler.y * 0.5);
+	double cr = cos(euler.x * 0.5);
+	double sr = sin(euler.x * 0.5);
+
+	q.w = cy * cp * cr + sy * sp * sr;
+	q.x = cy * cp * sr - sy * sp * cr;
+	q.y = sy * cp * sr + cy * sp * cr;
+	q.z = sy * cp * cr - cy * sp * sr;
+}
+
+void Rslam::updateViewerPose(Device &device) {
 	if (viewer->isRunning) {
-		std::vector<CgObject*>::iterator it = viewer->cgObject->begin();
+		//update camaxis
+		viewer->cgObject->at(0)->rx = -(float)Rvec.at<double>(1);
+		viewer->cgObject->at(0)->ry = (float)Rvec.at<double>(0);
+		viewer->cgObject->at(0)->rz = -(float)Rvec.at<double>(2);
+		viewer->cgObject->at(0)->tx = (float)t.at<double>(0) * 10.0f;
+		viewer->cgObject->at(0)->ty = -(float)t.at<double>(1) * 10.0f;
+		viewer->cgObject->at(0)->tz = -(float)t.at<double>(2) *10.0f;
+
+		// update imuaxis
+		Vector3 euler;
+		toEuler(device.ImuRotation, euler);
+		viewer->cgObject->at(1)->rx = euler.z;
+		viewer->cgObject->at(1)->ry = euler.x + (3.14159265358979f / 2.0f);
+		viewer->cgObject->at(1)->rz = -euler.y;// +(3.14159265358979f / 2.0f);
+		viewer->cgObject->at(1)->tx = (float)t.at<double>(0) * 10.0f;
+		viewer->cgObject->at(1)->ty = -(float)t.at<double>(1) * 10.0f;
+		viewer->cgObject->at(1)->tz = -(float)t.at<double>(2) *10.0f;
+
+		cv::Mat im = cv::Mat::zeros(100, 300, CV_8UC3);
+		im.setTo(cv::Scalar(50, 50, 50));
+		double imuRvecdata[3] = { (double)euler.x, (double)euler.y, (double)euler.z };
+		cv::Mat imuRvec = cv::Mat(1, 3, CV_64F, imuRvecdata).clone();
+		overlayMatrix("imupose", im, imuRvec, imuRvec);
+	}
+}
+
+void Rslam::updateViewerPose() {
+	// Global
+	if (viewer->isRunning) {
+		//update camaxis
 		viewer->cgObject->at(0)->rx = -(float)Rvec.at<double>(1);
 		viewer->cgObject->at(0)->ry = (float)Rvec.at<double>(0);
 		viewer->cgObject->at(0)->rz = -(float)Rvec.at<double>(2);
@@ -648,7 +867,7 @@ void Rslam::visualizeFps(double fps) {
 	im.setTo(cv::Scalar(50, 50, 50));
 	
 	//cv::circle(im, cv::Point(200, 200), 120, cv::Scalar(50, 50, 50), -1);
-	cv::circle(im, cv::Point(200, 200), (int)(fps*1.5), cv::Scalar(255, 255, 255), -1);
+	cv::circle(im, cv::Point(200, 200), (int)(std::min(fps*1.5, 120.0)), cv::Scalar(255, 255, 255), -1);
 	cv::circle(im, cv::Point(200, 200), 90, cv::Scalar(0, 0, 255), 1);
 
 	cv::putText(im, parseDecimal(fps, 1), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
@@ -675,10 +894,11 @@ void Rslam::visualizeDepth(Device &device) {
 	cv::imshow("cm_img0", cm_img0);
 }
 
-void Rslam::overlayMatrix(cv::Mat &im, cv::Mat R1, cv::Mat t) {
+void Rslam::overlayMatrix(const char* windowName, cv::Mat &im, cv::Mat R1, cv::Mat t) {
 	std::ostringstream message1, message2, message3;
-	message1 << std::fixed << this->parseDecimal(R1.at<double>(0), 2) << " " << this->parseDecimal(R1.at<double>(1), 2) << " " << this->parseDecimal(R1.at<double>(2), 2);// << " " << this->parseDecimal(t.at<double>(0));
-	message2 << std::fixed << this->parseDecimal(t.at<double>(0), 2) << " " << this->parseDecimal(t.at<double>(1), 2) << " " << this->parseDecimal(t.at<double>(2), 2);// << " " << this->parseDecimal(t.at<double>(1));
+	int precision = 3;
+	message1 << std::fixed << this->parseDecimal(R1.at<double>(0), precision) << " " << this->parseDecimal(R1.at<double>(1), precision) << " " << this->parseDecimal(R1.at<double>(2), precision);// << " " << this->parseDecimal(t.at<double>(0));
+	message2 << std::fixed << this->parseDecimal(t.at<double>(0), precision) << " " << this->parseDecimal(t.at<double>(1), precision) << " " << this->parseDecimal(t.at<double>(2), precision);// << " " << this->parseDecimal(t.at<double>(1));
 	//message3 << std::fixed << this->parseDecimal(R1.at<double>(2, 0)) << " " << this->parseDecimal(R1.at<double>(2, 1)) << " " << this->parseDecimal(R1.at<double>(2, 2)) << " " << this->parseDecimal(t.at<double>(2));
 	cv::Mat overlay;
 	double alpha = 0.3;
@@ -690,7 +910,7 @@ void Rslam::overlayMatrix(cv::Mat &im, cv::Mat R1, cv::Mat t) {
 	cv::putText(im, message1.str(), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, tc);
 	cv::putText(im, message2.str(), cv::Point(0, 22), cv::FONT_HERSHEY_PLAIN, 1, tc);
 	//cv::putText(im, message3.str(), cv::Point(0, 34), cv::FONT_HERSHEY_PLAIN, 1, tc);
-	cv::imshow("pose", im);
+	cv::imshow(windowName, im);
 }
 
 
@@ -1189,6 +1409,9 @@ int Rslam::solveKeypointsAndDescriptors(cv::Mat im) {
 	//surf.downloadKeypoints(d_keypoints, keypoints);
 	//return 0;
 }
+
+
+
 
 
 

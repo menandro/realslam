@@ -124,6 +124,11 @@ void CgObject::setNormalMatrix(glm::mat4 model, glm::mat4 view) {
 	shader->setMat3("normalMatrix", normalMatrix);
 }
 
+void CgObject::setLight() {
+	shader->setVec3("lightColor", 1.0f, 1.0f, 1.0f);
+	shader->setVec3("lightPos", 1.2f, 1.0f, 2.0f);
+}
+
 void CgObject::setMVP(glm::mat4 model, glm::mat4 view, glm::mat4 projection) {
 	shader->setMat4("mvpMatrix", projection*view*model);
 	glm::mat3x3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(view*model)));

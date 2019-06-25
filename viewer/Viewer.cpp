@@ -50,10 +50,53 @@ int Viewer::createWindow(int scrWidth, int scrHeight, const char *windowName)
 	this->lastY = scrHeight / 2.0f;
 	this->firstMouse = true;
 
+	std::cout << "Creating GLFW window: " << windowName << std::endl;
 	window = glfwCreateWindow(scrWidth, scrHeight, windowName, NULL, NULL);
 	if (window == NULL)
 	{
 		std::cout << "Failed to create GLFW window" << std::endl;
+		glfwTerminate();
+		return -1;
+	}
+
+	glfwMakeContextCurrent(window);
+	glfwSetWindowUserPointer(window, this);
+	glfwSetFramebufferSizeCallback(window, &Viewer::framebufferSizeCallback);
+	glfwSetCursorPosCallback(window, &Viewer::mouseCallback);
+	glfwSetMouseButtonCallback(window, &Viewer::mouseButtonCallback);
+	glfwSetScrollCallback(window, &Viewer::scrollCallback);
+	glfwSetKeyCallback(window, &Viewer::keyCallback);
+
+	// glad: load all OpenGL function pointers
+	// ---------------------------------------
+	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+	{
+		std::cout << "Failed to initialize GLAD" << std::endl;
+		return -1;
+	}
+	glEnable(GL_DEPTH_TEST);
+}
+
+int Viewer::createWindow(int scrWidth, int scrHeight, const char *windowName, GLFWwindow *existingWindow)
+{
+	glfwInit();
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+	// glfw window creation
+	// --------------------
+	this->scrWidth = scrWidth;
+	this->scrHeight = scrHeight;
+	this->lastX = scrWidth / 2.0f;
+	this->lastY = scrHeight / 2.0f;
+	this->firstMouse = true;
+
+	std::cout << "Creating 2nd GLFW window: " << windowName << std::endl;
+	window = glfwCreateWindow(scrWidth, scrHeight, windowName, NULL, existingWindow);
+	if (window == NULL)
+	{
+		std::cout << "Failed to create second GLFW window" << std::endl;
 		glfwTerminate();
 		return -1;
 	}

@@ -54,7 +54,22 @@ public:
 	float GYRO_MIN_Z = -0.2496f;
 
 	double timestamps[RS2_STREAM_COUNT];
-	struct Gyro {
+
+	class Vector3 {
+	public:
+		Vector3() {};
+		Vector3(float x, float y, float z) {
+			this->x = x;
+			this->y = y;
+			this->z = z;
+		};
+		float x;
+		float y;
+		float z;
+	};
+
+	class Gyro {
+	public:
 		float x; //rate(dot) of rotation in x(rx)
 		float y;
 		float z;
@@ -63,7 +78,8 @@ public:
 		double dt;
 	};
 
-	struct Accel {
+	class Accel {
+	public:
 		float x;
 		float y;
 		float z;
@@ -72,7 +88,8 @@ public:
 		double dt;
 	};
 
-	struct Pose {
+	class Pose {
+	public:
 		float x;
 		float y;
 		float z;
@@ -82,8 +99,22 @@ public:
 		float rw;
 	};
 
-	rs2::context * ctx;
+	class Quaternion {
+	public:
+		Quaternion() {};
+		Quaternion(float x, float y, float z, float w) {
+			this->x = x;
+			this->y = y;
+			this->z = z;
+			this->w = w;
+		}
+		float x;
+		float y;
+		float z;
+		float w;
+	};
 
+	
 	// For keyframing
 	class Keyframe {
 	public:
@@ -112,6 +143,7 @@ public:
 		Device() {};
 		~Device() {};
 		std::string id;
+		bool isFound = false;
 
 		rs2::pipeline * pipe;
 		rs2::frameset frameset;
@@ -147,8 +179,15 @@ public:
 		double fy;
 		cv::Mat intrinsic;
 		cv::Mat distCoeffs;
+		
+		// Relative pose from keyframe
 		cv::Mat Rvec;
 		cv::Mat t;
+		// Relative pose of IMU (from keyframe?)
+		cv::Mat ImuRvec;
+		cv::Mat ImuT;
+		Quaternion ImuRotation;
+		bool imuKeyframeExist;
 
 		Keyframe * currentKeyframe;
 		bool keyframeExist;
@@ -168,6 +207,7 @@ public:
 	std::vector<rs2::pipeline*> pipelines;
 	std::vector<rs2::frameset> framesets;
 	rs2::spatial_filter spatialFilter;
+	rs2::context * ctx;
 
 	rs2::align alignToColor = rs2::align(RS2_STREAM_COLOR);
 	rs2::colorizer colorizer;
@@ -197,11 +237,16 @@ public:
 
 	std::vector<Keyframe> keyframes;
 
+	int solveImuPose(Device& device);
+	int solveCameraPose();
+
 	int relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv::Mat currentFrame);
 	//int detectAndComputeOrb(Device &device);
 	int detectAndComputeOrb(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
 	int solveRelativePose(Device& device, Keyframe *keyframe);
 	int matchAndPose(Device& device);
+	int createImuKeyframe(Device& device);
+	
 
 	// Functions
 	int initialize(Settings settings, FeatureDetectionMethod featMethod, std::string device0SN, std::string device1SN);
@@ -226,12 +271,12 @@ public:
 	int extractTimeStamps();
 	int upsampleDepth(Device &device);
 
-	void updatePose();
-	int getPose(); // fetcher of current pose
-
 	// Utilities
 	void visualizeImu(Device &device);
 	void visualizePose();
+	void toEuler(Quaternion q, Vector3 &euler);
+	void toQuaternion(Vector3 euler, Quaternion &q);
+	void updateViewerPose(Device &device);
 	void updateViewerPose();
 	void visualizeColor(Device &device);
 	void visualizeDepth(Device &device);
@@ -249,9 +294,11 @@ public:
 	//Tools
 	std::string parseDecimal(double f);
 	std::string parseDecimal(double f, int precision);
-	void overlayMatrix(cv::Mat &im, cv::Mat R1, cv::Mat t);
+	void overlayMatrix(const char * windowName, cv::Mat &im, cv::Mat R1, cv::Mat t);
 
 	// Unused
+	void updatePose();
+	int getPose(); // fetcher of current pose
 	int solveKeypointsAndDescriptors(cv::Mat im);
 	int solveStereoSurf(cv::Mat ir1, cv::Mat ir2);
 	int solveStereoOrb(cv::Mat ir1, cv::Mat ir2);

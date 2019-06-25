@@ -159,6 +159,7 @@ public:
 	void bindTexture();
 	void setMVP(glm::mat4 model, glm::mat4 view, glm::mat4 projection);
 	void setNormalMatrix(glm::mat4 model, glm::mat4 view);
+	void setLight();
 	void setDrawMode(Mode mode);
 	void draw();
 	void bindBuffer(); //bind shader and vao
@@ -196,6 +197,7 @@ public:
 	void close();
 	void makeCurrent();
 	int createWindow(int scrWidth, int scrHeight, const char *windowName);
+	int createWindow(int scrWidth, int scrHeight, const char *windowName, GLFWwindow * existingWindow);
 	void processInput(GLFWwindow *window);
 
 	static void framebufferSizeCallback(GLFWwindow* window, int width, int height);

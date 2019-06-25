@@ -10,7 +10,13 @@ int main() {
 	// SLAM USING D435i
 	Rslam* rslam = new Rslam();
 	rslam->initialize(Rslam::D435I_IR_640_360_90, Rslam::ORB, "843112071357", "841612070674");
-	rslam->run();
+	//rslam->run();
+	std::thread t1(&Rslam::visualizePose, rslam);
+	std::thread t3(&Rslam::poseSolverDefaultStereoMulti, rslam);
+
+	t1.join();
+	t3.join();
+
 	//rslam->testOrb();
 	//rslam->recordAll();
 	//rslam->playback("843112071357");
