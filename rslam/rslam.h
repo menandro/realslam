@@ -7,6 +7,8 @@
 #include <filereader\Filereader.h>
 #include <upsampling/upsampling.h>
 #include <thread>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 class Rslam {
 public:
@@ -126,8 +128,15 @@ public:
 		cv::Mat descriptors;
 		cv::cuda::GpuMat d_descriptors;
 
+		// Keyframe global pose
 		cv::Mat R;
 		cv::Mat t;
+
+		// Current frame relative pose
+		cv::Mat currentRelativeR;
+		cv::Mat currentRelativeT;
+		cv::Mat currentGlobalR;
+		cv::Mat currentGlobalT;
 
 		// These values change every frame
 		std::vector<cv::KeyPoint> matchedKeypoints;
@@ -144,9 +153,11 @@ public:
 		~Device() {};
 		std::string id;
 		bool isFound = false;
+		std::string serialNo;
 
 		rs2::pipeline * pipe;
 		rs2::frameset frameset;
+		rs2::config cfg;
 		cv::Mat depth;
 		cv::Mat depth32f;
 		cv::Mat color;
@@ -187,7 +198,9 @@ public:
 		cv::Mat ImuRvec;
 		cv::Mat ImuT;
 		Quaternion ImuRotation;
-		bool imuKeyframeExist;
+		Vector3 ImuTranslation;
+		Vector3 ImuVelocity;
+		//bool imuKeyframeExist; //imu is global except yaw
 
 		Keyframe * currentKeyframe;
 		bool keyframeExist;
@@ -237,6 +250,7 @@ public:
 
 	std::vector<Keyframe> keyframes;
 
+	bool settleImu(Device& device);
 	int solveImuPose(Device& device);
 	int solveCameraPose();
 
@@ -256,6 +270,7 @@ private:
 	int initialize(Settings settings);
 	int setIntrinsics(Device &device, double cx, double cy, double fx, double fy);
 	int initContainers(Device &device);
+	bool isThisDevice(std::string serialNo, std::string queryNo);
 
 public:
 	int recordAll();
@@ -275,6 +290,8 @@ public:
 	void visualizeImu(Device &device);
 	void visualizePose();
 	void toEuler(Quaternion q, Vector3 &euler);
+
+	// Convert Euler(in IMU coordinates) to Quaternion (in MADGWICK/WIKIPEDIA coordinates)
 	void toQuaternion(Vector3 euler, Quaternion &q);
 	void updateViewerPose(Device &device);
 	void updateViewerPose();
@@ -295,6 +312,7 @@ public:
 	std::string parseDecimal(double f);
 	std::string parseDecimal(double f, int precision);
 	void overlayMatrix(const char * windowName, cv::Mat &im, cv::Mat R1, cv::Mat t);
+	void overlayMatrixRot(const char* windowName, cv::Mat &im, Vector3 euler, Quaternion q);
 
 	// Unused
 	void updatePose();

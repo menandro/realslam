@@ -152,6 +152,8 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <None Include="edgeshader.frag" />
+    <None Include="edgeshader.vert" />
     <None Include="myshader2.frag" />
     <None Include="myshader2.vert" />
   </ItemGroup>

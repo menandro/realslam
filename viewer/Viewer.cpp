@@ -2,7 +2,7 @@
 
 Viewer::Viewer()
 {
-	camera = new Camera(glm::vec3(0.0f, 1.0f, 5.0f));
+	camera = new Camera(glm::vec3(0.0f, 0.0f, -5.0f), glm::vec3(0.0f, 1.0f, 0.0f), 90.0f, 0.0f);
 	projectionType = ProjectionType::DEFAULT_PROJECTION;
 	camera->orthoZoom = 1.0f;
 
@@ -24,7 +24,7 @@ void Viewer::setCameraProjectionType(ProjectionType projectionType) {
 		projectionMat = glm::ortho(-zoom, zoom, -zoom, zoom, 0.001f, 10.0f);
 	}
 	else if (projectionType == ProjectionType::PERSPECTIVE) {
-		projectionMat = glm::perspective(glm::radians(45.0f), (float)this->scrWidth / (float)this->scrHeight, 0.001f, 10.0f);
+		projectionMat = glm::perspective(glm::radians(45.0f), (float)this->scrWidth / (float)this->scrHeight, 0.001f, 50.0f);
 	}
 	else {
 		projectionMat = glm::perspective(glm::radians(45.0f), (float)this->scrWidth / (float)this->scrHeight, 0.001f, 10.0f);
@@ -242,8 +242,10 @@ void Viewer::run() {
 			(*it)->bindShader();
 
 			// Transform object
-			glm::mat4 rot = glm::eulerAngleYXZ((*it)->rx, (*it)->ry, (*it)->rz);
-			glm::mat4 trans = glm::translate(rot, glm::vec3((*it)->tx, (*it)->ty, (*it)->tz));
+			//glm::mat4 rot = glm::eulerAngleYXZ((*it)->ry, (*it)->rx, (*it)->rz);
+			//glm::quat rotq((*it)->qw, (*it)->qx, (*it)->qy, (*it)->qz);
+			glm::mat4 rotmat = glm::mat4_cast((*it)->qrot);
+			glm::mat4 trans = glm::translate(rotmat, glm::vec3((*it)->tx, (*it)->ty, (*it)->tz));
 			glm::mat4 objectModel = trans;// *rot;
 
 			(*it)->setMVP(model*objectModel, view, projection);

@@ -26,5 +26,11 @@
     <None Include="myshader2.vert">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="edgeshader.frag">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="edgeshader.vert">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

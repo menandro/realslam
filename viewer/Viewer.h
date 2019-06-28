@@ -119,6 +119,9 @@ public:
 	// Current pose
 	float rx, ry, rz;
 	float tx, ty, tz;
+	// Quaternion rotation
+	glm::quat qrot;
+
 	glm::mat4 model;
 
 						//properties
@@ -160,6 +163,8 @@ public:
 	void setMVP(glm::mat4 model, glm::mat4 view, glm::mat4 projection);
 	void setNormalMatrix(glm::mat4 model, glm::mat4 view);
 	void setLight();
+	void setColor(cv::Scalar color, double alpha);
+	void setColor(cv::Scalar color);
 	void setDrawMode(Mode mode);
 	void draw();
 	void bindBuffer(); //bind shader and vao
