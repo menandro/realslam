@@ -251,7 +251,7 @@ int Rslam::recordAll() {
 		std::string filename = dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 		filename.append(".bag");
 		cfg.enable_record_to_file(filename);
-		if (dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) == "843112071357") {
+		if (isThisDevice(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER), "843112071357")) {
 			// d435 device, enable depth, 2IR, rgb, imu
 			cfg.disable_all_streams();
 			cfg.enable_stream(RS2_STREAM_DEPTH, 640, 360, rs2_format::RS2_FORMAT_Z16, 90);
