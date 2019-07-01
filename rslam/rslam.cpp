@@ -237,11 +237,17 @@ int Rslam::recordAll() {
 	std::vector<rs2::pipeline> pipelines;
 	// Start a streaming pipe per each connected device
 	auto tt = context.query_devices();
-	std::cout << "Size " << tt.size() << std::endl;
+	char suffix[10];
+	std::cout << tt.size() << " sensors found. " << std::endl;
+	std::cout << "Enter suffix for file (max. 10 characters): ";
+	std::cin.getline(suffix, 10);
+
 	/*rs2::device d435i;
 	rs2::device t265;*/
-	std::clock_t start;
-//	double duration;
+	//auto time = std::chrono::high_resolution_clock::now();
+	//	double duration;
+	//std::cout << time << std::endl;
+
 	// Start pipes as recorders
 	for (auto&& dev : context.query_devices())
 	{
@@ -249,17 +255,19 @@ int Rslam::recordAll() {
 		rs2::config cfg;
 		cfg.enable_device(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
 		std::string filename = dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+		filename.append(suffix);
 		filename.append(".bag");
 		cfg.enable_record_to_file(filename);
-		if (dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) == "843112071357") {
+		if (isThisDevice(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER), "843112071357")) {
 			// d435 device, enable depth, 2IR, rgb, imu
-			cfg.disable_all_streams();
+			std::cout << "Setting up config for 843112071357" << std::endl;
 			cfg.enable_stream(RS2_STREAM_DEPTH, 640, 360, rs2_format::RS2_FORMAT_Z16, 90);
 			cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 360, rs2_format::RS2_FORMAT_Y8, 90);
 			cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 360, rs2_format::RS2_FORMAT_Y8, 90);
 			cfg.enable_stream(RS2_STREAM_COLOR, 640, 360, RS2_FORMAT_BGR8, 60);
 			cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
 			cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
+			//std::cout << cfg.get() << std::endl;
 		}
 		else {
 			// t265 device, imu
@@ -273,7 +281,7 @@ int Rslam::recordAll() {
 	std::cout << "Press g: stop recording." << std::endl;
 	cv::Mat something = cv::imread("recording.png");
 	cv::imshow("test", something);
-	start = std::clock();
+//	start = std::clock();
 	while (true) {
 		char pressed = cv::waitKey(10);
 		//if (pressed == 27) break; //press escape
@@ -301,11 +309,17 @@ int Rslam::recordAll() {
 	return 0;
 }
 
-int Rslam::playback(const char* serialNumber) {
+int Rslam::playback(const char* filename) {
 	try{
 		rs2::pipeline pipe;
 		rs2::config cfg;
-		cfg.enable_device_from_file(serialNumber);
+		cfg.enable_device_from_file(filename);
+		cfg.enable_stream(RS2_STREAM_DEPTH, 640, 360, rs2_format::RS2_FORMAT_Z16, 90);
+		cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 360, rs2_format::RS2_FORMAT_Y8, 90);
+		cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 360, rs2_format::RS2_FORMAT_Y8, 90);
+		cfg.enable_stream(RS2_STREAM_COLOR, 640, 360, RS2_FORMAT_BGR8, 60);
+		cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
+		cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
 		pipe.start(cfg);
 		std::cout << "Pipe started" << std::endl;
 		const auto window_name = "Display Image";
