@@ -596,7 +596,7 @@ int Rslam::solveImuPose(Device &device) {
 	//float gyroMeasErrorZ = GYRO_BIAS_Z;
 	//float betax = 5.0f * gyroMeasErrorX;
 	//float betay = 5.0f * gyroMeasErrorY;
-	//float betaz = 5.0f * gyroMeasErrorZ;
+	//float betax = 0.01f;
 	float gyroMeasError = 3.14159265358979f * (5.0f / 180.0f);
 	float betaw = 0.8f * gyroMeasError;
 	
