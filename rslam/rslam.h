@@ -209,6 +209,12 @@ public:
 		Gyro gyro;
 		Accel accel;
 		Pose pose;
+
+		rs2::frame_queue gyroQueue = rs2::frame_queue(1);
+		rs2::frame_queue accelQueue = rs2::frame_queue(1);
+		rs2::frame_queue depthQueue = rs2::frame_queue(1);
+		rs2::frame_queue infrared1Queue = rs2::frame_queue(1);
+		rs2::frame_queue infrared2Queue = rs2::frame_queue(1);
 	};
 
 	// MultiCamera fixed
@@ -251,7 +257,11 @@ public:
 
 	std::vector<Keyframe> keyframes;
 
+	int initialize(Settings settings, FeatureDetectionMethod featMethod, std::string device0SN, std::string device1SN);
+	int run(); // poseSolver thread
+	int fetchFrames();
 	int imuPoseSolver();
+	int cameraPoseSolver();
 	int poseSolverDefaultStereoMulti();
 	int solveImuPose(Device& device);
 	bool settleImu(Device& device);
@@ -260,14 +270,9 @@ public:
 	int solveRelativePose(Device& device, Keyframe *keyframe);
 	int detectAndComputeOrb(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
 	int relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv::Mat currentFrame);
-	//int detectAndComputeOrb(Device &device);
 	
 	int createImuKeyframe(Device& device);
 	
-
-	// Functions
-	int initialize(Settings settings, FeatureDetectionMethod featMethod, std::string device0SN, std::string device1SN);
-
 private:
 	int initialize(int width, int height, int fps);
 	int initialize(Settings settings);
@@ -278,78 +283,39 @@ private:
 public:
 	int recordAll();
 	int playback(const char* serialNumber);
-	int run(); // poseSolver thread
-	int poseSolver(); // main loop for solving pose
-	int poseSolverDefaultStereo();
 	
+	bool processGyro(Device &device);
+	bool processAccel(Device &device);
+	bool processDepth(Device &device);
+	bool processIr(Device &device);
+
 	int extractGyroAndAccel(Device &device);
-	int extractColor(Device &device);
 	int extractDepth(Device &device);
 	int extractIr(Device &device);
-	int extractTimeStamps();
 	int upsampleDepth(Device &device);
+	int extractColor(Device &device);
 
-	// Utilities
+	/// Utilities
 	void visualizeImu(Device &device);
 	void visualizePose();
 	void toEuler(Quaternion q, Vector3 &euler);
-
 	// Convert Euler(in IMU coordinates) to Quaternion (in MADGWICK/WIKIPEDIA coordinates)
 	void toQuaternion(Vector3 euler, Quaternion &q);
 	void updateViewerCameraPose(Device &device);
 	void updateViewerImuPose(Device &device);
-	void updateViewerPose(Device &device);
-	void updateViewerPose();
 	void visualizeColor(Device &device);
 	void visualizeDepth(Device &device);
 	void visualizeFps(double fps);
-
-	void visualizeKeypoints(cv::Mat im);
-	void visualizeKeypoints(cv::Mat ir1, cv::Mat ir2);
 	void visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir1, std::string windowNamePrefix);
-	void visualizeStereoKeypoints(cv::Mat ir1, cv::Mat ir2);
-	void visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir2);
 	
 	cv::Mat gyroDisp;
 	cv::Mat accelDisp;
 
-	//Tools
+	////Tools
 	std::string parseDecimal(double f);
 	std::string parseDecimal(double f, int precision);
 	void overlayMatrix(const char * windowName, cv::Mat &im, cv::Mat R1, cv::Mat t);
 	void overlayMatrixRot(const char* windowName, cv::Mat &im, Vector3 euler, Quaternion q);
 
-	// Unused
-	void updatePose();
-	int getPose(); // fetcher of current pose
-	int solveKeypointsAndDescriptors(cv::Mat im);
-	int solveStereoSurf(cv::Mat ir1, cv::Mat ir2);
-	int solveStereoOrb(cv::Mat ir1, cv::Mat ir2);
-	int solveRelativeSurf(Keyframe * keyframe);
-	int solveRelativeOrb(Keyframe * keyframe);
-	int detectAndComputeSurf(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
-
-	// Tests
-	int testOrb();
-	int testT265();
-	int runTestViewerSimpleThread();
-	int testViewerSimple();
-	int getFrames();
-	int testStream();
-	int testImu();
-	int getGyro(float *roll, float* pitch, float *yaw);
-
-	int showAlignedDepth();
-	int showDepth();
-	static int getPose(float *x, float *y, float *z, float *roll, float *pitch, float *yaw);
-
-
+	std::mutex mutex;
 };
-
-
-
-
-
-
-
-// Trash codes
