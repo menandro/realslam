@@ -12,6 +12,7 @@ int Rslam::initialize(int width, int height, int fps) {
 		//pipe = new rs2::pipeline(*ctx);
 		//pipelines = new std::vector<rs2::pipeline*>();
 		auto dev = ctx->query_devices();
+		
 		for (auto&& devfound : dev) {
 			const char * serialNo = devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 			std::cout << "Found device: " << serialNo << std::endl;
