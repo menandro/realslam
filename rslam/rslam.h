@@ -9,6 +9,7 @@
 #include <thread>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <tchar.h>
 
 class Rslam {
 public:

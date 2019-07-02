@@ -280,7 +280,9 @@ int Rslam::recordAll() {
 	std::cout << "Recording..." << std::endl;
 	std::cout << "Press g: stop recording." << std::endl;
 	cv::Mat something = cv::imread("recording.png");
-	cv::imshow("test", something);
+	cv::namedWindow("test", cv::WINDOW_NORMAL);
+	HWND windowHandle = FindWindow(NULL, _T("test"));
+	SetForegroundWindow(windowHandle);
 //	start = std::clock();
 	while (true) {
 		char pressed = cv::waitKey(10);
@@ -305,6 +307,7 @@ int Rslam::recordAll() {
 			std::cout << "DONE." << std::endl;
 			break;
 		}
+		cv::imshow("test", something);
 	}
 	return 0;
 }
