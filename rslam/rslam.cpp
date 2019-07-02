@@ -422,9 +422,12 @@ int Rslam::imuPoseSolver() {
 			}
 		}
 		else {
-			processGyro(device0);
-			processAccel(device0);
-
+			if (!(processGyro(device0) && processAccel(device0)))
+			{
+				continue;
+			}
+			//processGyro(device0);
+			//processAccel(device0);
 			solveImuPose(device0);
 			updateViewerImuPose(device0);
 
