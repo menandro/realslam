@@ -129,6 +129,7 @@ public:
 		cv::cuda::GpuMat d_descriptors;
 
 		// Keyframe global pose
+		cv::Mat depth;
 		cv::Mat R;
 		cv::Mat t;
 
@@ -250,15 +251,17 @@ public:
 
 	std::vector<Keyframe> keyframes;
 
-	bool settleImu(Device& device);
+	int imuPoseSolver();
+	int poseSolverDefaultStereoMulti();
 	int solveImuPose(Device& device);
+	bool settleImu(Device& device);
 	int solveCameraPose();
-
+	int matchAndPose(Device& device);
+	int solveRelativePose(Device& device, Keyframe *keyframe);
+	int detectAndComputeOrb(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
 	int relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv::Mat currentFrame);
 	//int detectAndComputeOrb(Device &device);
-	int detectAndComputeOrb(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
-	int solveRelativePose(Device& device, Keyframe *keyframe);
-	int matchAndPose(Device& device);
+	
 	int createImuKeyframe(Device& device);
 	
 
@@ -278,7 +281,7 @@ public:
 	int run(); // poseSolver thread
 	int poseSolver(); // main loop for solving pose
 	int poseSolverDefaultStereo();
-	int poseSolverDefaultStereoMulti();
+	
 	int extractGyroAndAccel(Device &device);
 	int extractColor(Device &device);
 	int extractDepth(Device &device);
@@ -293,6 +296,8 @@ public:
 
 	// Convert Euler(in IMU coordinates) to Quaternion (in MADGWICK/WIKIPEDIA coordinates)
 	void toQuaternion(Vector3 euler, Quaternion &q);
+	void updateViewerCameraPose(Device &device);
+	void updateViewerImuPose(Device &device);
 	void updateViewerPose(Device &device);
 	void updateViewerPose();
 	void visualizeColor(Device &device);

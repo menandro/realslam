@@ -107,7 +107,7 @@ int Rslam::initialize(int width, int height, int fps) {
 	}
 	else if (featMethod == ORB){
 		matcher = cv::cuda::DescriptorMatcher::createBFMatcher(cv::NORM_HAMMING); //for orb
-		orb = cv::cuda::ORB::create(200, 2.0f, 1);// , 10, 0, 2, 0, 10);
+		orb = cv::cuda::ORB::create(100, 2.0f, 1);// , 10, 0, 2, 0, 10);
 		orb->setBlurForDescriptor(true);
 		//orb = cv::cuda::ORB::create(200, 2.0f, 3, 10, 0, 2, 0, 10);
 	}
@@ -348,6 +348,7 @@ int Rslam::run() {
 	//std::thread t1(&Rslam::visualizePose, this);
 	//std::thread t2(&Rslam::poseSolver, this);
 	//std::thread t2(&Rslam::poseSolverDefaultStereo, this);
+	//std::thread t1(&Rslam::imuPoseSolver, this);
 	std::thread t2(&Rslam::poseSolverDefaultStereoMulti, this);
 	std::thread t3(&Rslam::visualizePose, this);
 
@@ -357,6 +358,62 @@ int Rslam::run() {
 }
 
 // Main loop for pose estimation
+int Rslam::imuPoseSolver() {
+	bool isImuSettled = false;
+	bool dropFirstTimestamp = false;
+
+	while (true) {
+		char pressed = cv::waitKey(10);
+		if (pressed == 27) break;
+
+		// Poll framesets multi-camera (when any is available)
+		/*bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset) |
+			device1.pipe->poll_for_frames(&device1.frameset));*/
+		bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset));
+		if (!pollSuccess) continue;
+
+		// Let IMU settle first
+		if (!isImuSettled) {
+			if (!dropFirstTimestamp) {
+				extractGyroAndAccel(device0); // dump first timestamp
+				// Compute initial imu orientation from accelerometer. set yaw to zero.
+				std::cout << device0.accel.x << " " << device0.accel.y << " " << device0.accel.z << std::endl;
+
+				//MALI TO!
+				float g = sqrtf(device0.accel.x * device0.accel.x + device0.accel.y * device0.accel.y + device0.accel.z*device0.accel.z);
+				float a_x = device0.accel.x / g;
+				float a_y = device0.accel.y / g;
+				float a_z = device0.accel.z / g;
+
+				float thetax = std::atan2f(a_y, a_z);
+				float thetaz = std::atan2f(a_y, a_x);
+				std::cout << thetax << " " << thetaz << std::endl;
+
+				glm::quat q(glm::vec3(thetax, 0.0f, -thetaz));
+				device0.ImuRotation = Quaternion(q.x, q.y, q.z, q.w);
+				//toQuaternion(Vector3(thetax, 0.0f, -thetaz), device0.ImuRotation);
+				//toQuaternion(Vector3(thetax, 0.0f, -thetaz), device0.ImuRotation);
+				dropFirstTimestamp = true;
+			}
+			else {
+				extractGyroAndAccel(device0);
+				if (settleImu(device0))
+					isImuSettled = true;
+			}
+		}
+		else {
+			extractGyroAndAccel(device0);
+			solveImuPose(device0);
+			updateViewerImuPose(device0);
+
+			//solveCameraPose();
+			//updateViewerCameraPose(device0);
+		}
+		//visualizeImu();
+	}
+	return 0;
+}
+
 int Rslam::poseSolverDefaultStereoMulti() {
 //	double last_ts[RS2_STREAM_COUNT];
 //	double dt[RS2_STREAM_COUNT];
@@ -433,13 +490,15 @@ int Rslam::poseSolverDefaultStereoMulti() {
 		else {
 			extractGyroAndAccel(device0);
 			solveImuPose(device0);
+			updateViewerImuPose(device0);
+
+			//solveCameraPose();
+			//updateViewerCameraPose(device0);
 		}
 		//visualizeImu();
 
-		solveCameraPose();
-		updateViewerPose(device0);
-
 		fps = 1 / ((std::clock() - start) / (double)CLOCKS_PER_SEC);
+		if (fps > 500.0f) fps = 500.0f;
 		oldFps = (fps + oldFps) / 2.0; // Running average
 		visualizeFps(oldFps);
 	}
@@ -452,7 +511,8 @@ bool Rslam::settleImu(Device &device) {
 }
 
 int Rslam::solveImuPose(Device &device) {
-	float gyroMeasError = 3.14159265358979f * (5.0f / 180.0f);
+	float gyroMeasError = GYRO_BIAS_Y;
+	//float gyroMeasError = 3.14159265358979f * (5.0f / 180.0f);
 	float beta = sqrtf(3.0f / 4.0f) * gyroMeasError;
 	float SEq_1 = device.ImuRotation.w;
 	float SEq_2 = device.ImuRotation.x;
@@ -930,6 +990,52 @@ void Rslam::toQuaternion(Vector3 euler, Quaternion &q) // yaw (Z), pitch (Y), ro
 	q.x = (float)(cy * cp * sr - sy * sp * cr);
 	q.y = (float)(sy * cp * sr + cy * sp * cr);
 	q.z = (float)(sy * cp * cr - cy * sp * sr);
+}
+
+void Rslam::updateViewerCameraPose(Device &device) {
+	if (viewer->isRunning) {
+		float translationScale = 10.0f;
+		//update camaxis
+
+		glm::quat q(glm::vec3(-(float)Rvec.at<double>(0), -(float)Rvec.at<double>(1), (float)Rvec.at<double>(2)));
+		viewer->cgObject->at(0)->qrot = q;
+
+		viewer->cgObject->at(0)->tx = -(float)t.at<double>(0) * translationScale;
+		viewer->cgObject->at(0)->ty = -(float)t.at<double>(1) * translationScale;
+		viewer->cgObject->at(0)->tz = (float)t.at<double>(2) * translationScale;
+
+		viewer->cgObject->at(1)->qrot = q;
+
+		viewer->cgObject->at(1)->tx = -(float)t.at<double>(0) * translationScale;
+		viewer->cgObject->at(1)->ty = -(float)t.at<double>(1) * translationScale;
+		viewer->cgObject->at(1)->tz = (float)t.at<double>(2) * translationScale;
+	}
+}
+
+void Rslam::updateViewerImuPose(Device &device) {
+	if (viewer->isRunning) {
+		float translationScale = 10.0f;
+
+		// update imuaxis
+		glm::quat imuAdjust = glm::quat(glm::vec3(-1.57079632679f, -1.57079632679f, 0.0f));
+		glm::quat imuQ(device.ImuRotation.w, -device.ImuRotation.x, -device.ImuRotation.y, device.ImuRotation.z);
+		glm::quat imuQRot = imuAdjust * imuQ;
+		glm::vec3 euler = glm::eulerAngles(imuQRot);
+
+		viewer->cgObject->at(2)->qrot = imuQRot;
+		//viewer->cgObject->at(2)->tx = -(float)t.at<double>(0) * translationScale;
+		//viewer->cgObject->at(2)->ty = -(float)t.at<double>(1) * translationScale;
+		//viewer->cgObject->at(2)->tz = (float)t.at<double>(2) *translationScale;
+
+		viewer->cgObject->at(3)->qrot = imuQRot;
+		//viewer->cgObject->at(3)->tx = -(float)t.at<double>(0) * translationScale;
+		//viewer->cgObject->at(3)->ty = -(float)t.at<double>(1) * translationScale;
+		//viewer->cgObject->at(3)->tz = (float)t.at<double>(2) *translationScale;
+
+		cv::Mat im = cv::Mat::zeros(100, 300, CV_8UC3);
+		im.setTo(cv::Scalar(50, 50, 50));
+		overlayMatrixRot("imupose", im, Vector3(euler.x, euler.y, euler.z), device.ImuRotation);
+	}
 }
 
 void Rslam::updateViewerPose(Device &device) {
