@@ -107,7 +107,7 @@ int Rslam::initialize(int width, int height, int fps) {
 	}
 	else if (featMethod == ORB){
 		matcher = cv::cuda::DescriptorMatcher::createBFMatcher(cv::NORM_HAMMING); //for orb
-		orb = cv::cuda::ORB::create(100, 2.0f, 1);// , 10, 0, 2, 0, 10);
+		orb = cv::cuda::ORB::create(500, 2.0f, 1);// , 10, 0, 2, 0, 10);
 		orb->setBlurForDescriptor(true);
 		//orb = cv::cuda::ORB::create(200, 2.0f, 3, 10, 0, 2, 0, 10);
 	}
@@ -591,9 +591,15 @@ bool Rslam::settleImu(Device &device) {
 }
 
 int Rslam::solveImuPose(Device &device) {
-	float gyroMeasError = GYRO_BIAS_Y;
-	//float gyroMeasError = 3.14159265358979f * (5.0f / 180.0f);
-	float beta = sqrtf(3.0f / 4.0f) * gyroMeasError;
+	//float gyroMeasErrorX = GYRO_BIAS_X;
+	//float gyroMeasErrorY = GYRO_BIAS_Y;
+	//float gyroMeasErrorZ = GYRO_BIAS_Z;
+	//float betax = 5.0f * gyroMeasErrorX;
+	//float betay = 5.0f * gyroMeasErrorY;
+	//float betaz = 5.0f * gyroMeasErrorZ;
+	float gyroMeasError = 3.14159265358979f * (5.0f / 180.0f);
+	float betaw = 0.8f * gyroMeasError;
+	
 	float SEq_1 = device.ImuRotation.w;
 	float SEq_2 = device.ImuRotation.x;
 	float SEq_3 = device.ImuRotation.y;
@@ -657,10 +663,10 @@ int Rslam::solveImuPose(Device &device) {
 	SEqDot_omega_4 = halfSEq_1 * w_z + halfSEq_2 * w_y - halfSEq_3 * w_x;
 
 	// Compute then integrate the estimated quaternion derrivative
-	SEq_1 += (SEqDot_omega_1 - (beta * SEqHatDot_1)) * (float)device.gyro.dt;
-	SEq_2 += (SEqDot_omega_2 - (beta * SEqHatDot_2)) * (float)device.gyro.dt;
-	SEq_3 += (SEqDot_omega_3 - (beta * SEqHatDot_3)) * (float)device.gyro.dt;
-	SEq_4 += (SEqDot_omega_4 - (beta * SEqHatDot_4)) * (float)device.gyro.dt;
+	SEq_1 += (SEqDot_omega_1 - (betaw * SEqHatDot_1)) * (float)device.gyro.dt;
+	SEq_2 += (SEqDot_omega_2 - (betaw * SEqHatDot_2)) * (float)device.gyro.dt;
+	SEq_3 += (SEqDot_omega_3 - (betaw * SEqHatDot_3)) * (float)device.gyro.dt;
+	SEq_4 += (SEqDot_omega_4 - (betaw * SEqHatDot_4)) * (float)device.gyro.dt;
 
 	// Normalise quaternion
 	norm = sqrt(SEq_1 * SEq_1 + SEq_2 * SEq_2 + SEq_3 * SEq_3 + SEq_4 * SEq_4);
