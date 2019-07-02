@@ -511,8 +511,8 @@ bool Rslam::settleImu(Device &device) {
 }
 
 int Rslam::solveImuPose(Device &device) {
-	float gyroMeasError = GYRO_BIAS_Y;
-	//float gyroMeasError = 3.14159265358979f * (5.0f / 180.0f);
+	//float gyroMeasError = GYRO_BIAS_Y;
+	float gyroMeasError = 3.14159265358979f * (5.0f / 180.0f);
 	float beta = sqrtf(3.0f / 4.0f) * gyroMeasError;
 	float SEq_1 = device.ImuRotation.w;
 	float SEq_2 = device.ImuRotation.x;
