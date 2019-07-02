@@ -107,7 +107,7 @@ int Rslam::initialize(int width, int height, int fps) {
 	}
 	else if (featMethod == ORB){
 		matcher = cv::cuda::DescriptorMatcher::createBFMatcher(cv::NORM_HAMMING); //for orb
-		orb = cv::cuda::ORB::create(100, 2.0f, 1);// , 10, 0, 2, 0, 10);
+		orb = cv::cuda::ORB::create(500, 2.0f, 2);// , 10, 0, 2, 0, 10);
 		orb->setBlurForDescriptor(true);
 		//orb = cv::cuda::ORB::create(200, 2.0f, 3, 10, 0, 2, 0, 10);
 	}
@@ -492,8 +492,8 @@ int Rslam::poseSolverDefaultStereoMulti() {
 			solveImuPose(device0);
 			updateViewerImuPose(device0);
 
-			//solveCameraPose();
-			//updateViewerCameraPose(device0);
+			solveCameraPose();
+			updateViewerCameraPose(device0);
 		}
 		//visualizeImu();
 
