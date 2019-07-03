@@ -60,11 +60,15 @@ int Rslam::initialize(int width, int height, int fps) {
 
 				if (isThisDevice(serialNo, device0.serialNo)) {
 					device0.pipe->start(device0.cfg);
+					device0.depthScale = device0.pipe->get_active_profile().get_device()
+						.query_sensors().front().as<rs2::depth_sensor>().get_depth_scale();
 					device0.id = "device0";
 					device0.isFound = true;
 				}
 				else if (isThisDevice(serialNo, device1.serialNo)) {
 					device1.pipe->start(device1.cfg);
+					device1.depthScale = device1.pipe->get_active_profile().get_device()
+						.query_sensors().front().as<rs2::depth_sensor>().get_depth_scale();
 					//device1.pipe = pipe;
 					device1.id = "device1";
 					device1.isFound = true;
@@ -124,7 +128,76 @@ int Rslam::initialize(int width, int height, int fps) {
 	float alpha1 = 1.2f;
 	float timeStepLambda = 1.0f;
 	float lambdaTgvl2 = 5.0f;
-	float maxDepth = 10.0f;
+	float maxDepth = 100.0f;
+	this->maxDepth = maxDepth;
+	upsampling->initialize(width, height, maxIter, beta, gamma, alpha0, alpha1, timeStepLambda, lambdaTgvl2, maxDepth);
+	return EXIT_SUCCESS;
+}
+
+int Rslam::initializeFromFile(const char* filename0, const char* filenameImu) {
+	viewer = new Viewer();
+	setIntrinsics(device0, 320.729, 181.862, 321.902, 321.902);
+	setIntrinsics(device1, 320.729, 181.862, 321.902, 321.902);
+	this->width = 640;
+	this->height = 360;
+	this->fps = 90;
+	this->featMethod = ORB;
+
+	try {
+		device0.pipe = new rs2::pipeline();
+		externalImu.pipe = new rs2::pipeline();
+		device0.cfg.enable_device_from_file(filename0);
+		externalImu.cfg.enable_device_from_file(filenameImu);
+
+		device0.pipe->start(device0.cfg);
+		device0.depthScale = device0.pipe->get_active_profile().get_device()
+			.query_sensors().front().as<rs2::depth_sensor>().get_depth_scale();
+		std::cout << "Depth scale: " << device0.depthScale << std::endl;
+		externalImu.pipe->start(device1.cfg);
+
+		std::cout << "Pipes started." << std::endl;
+	}
+	catch (const rs2::error & e)
+	{
+		std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+
+	// Utilities
+	gyroDisp = cv::Mat::zeros(200, 600, CV_8UC3);
+	accelDisp = cv::Mat::zeros(200, 600, CV_8UC3);
+
+	// SLAM
+	if (featMethod == SURF) {
+		minHessian = 10000;
+		surf = cv::cuda::SURF_CUDA(this->minHessian);
+		surf.hessianThreshold = minHessian;
+		matcher = cv::cuda::DescriptorMatcher::createBFMatcher(); //for surf
+	}
+	else if (featMethod == ORB) {
+		matcher = cv::cuda::DescriptorMatcher::createBFMatcher(cv::NORM_HAMMING); //for orb
+		orb = cv::cuda::ORB::create(500, 1.2f, 8);// , 10, 0, 2, 0, 10);
+		orb->setBlurForDescriptor(true);
+		//orb = cv::cuda::ORB::create(200, 2.0f, 3, 10, 0, 2, 0, 10);
+	}
+
+	initContainers(device0);
+
+	// Depth upsampling
+	upsampling = new lup::Upsampling(32, 12, 32);
+	int maxIter = 200;
+	float beta = 9.0f;
+	float gamma = 0.85f;
+	float alpha0 = 17.0f;
+	float alpha1 = 1.2f;
+	float timeStepLambda = 1.0f;
+	float lambdaTgvl2 = 5.0f;
+	float maxDepth = 100.0f;
 	this->maxDepth = maxDepth;
 	upsampling->initialize(width, height, maxIter, beta, gamma, alpha0, alpha1, timeStepLambda, lambdaTgvl2, maxDepth);
 	return EXIT_SUCCESS;
@@ -221,7 +294,8 @@ int Rslam::setIntrinsics(Device &device, double cx, double cy, double fx, double
 }
 
 int Rslam::initContainers(Device &device) {
-	device.depth = cv::Mat(this->height, this->width, CV_16S);
+	device.depth = cv::Mat(this->height, this->width, CV_16U);
+	device.mask = cv::Mat(this->height, this->width, CV_8U);
 	device.depth32f = cv::Mat(this->height, this->width, CV_32F);
 	device.depthVis = cv::Mat(this->height, this->width, CV_8UC3);
 	device.color = cv::Mat(this->height, this->width, CV_8UC3);
@@ -249,7 +323,132 @@ int Rslam::run() {
 	t3.join();
 }
 
+int Rslam::runFromRecording() {
+	
+	std::thread t1(&Rslam::singleThread, this);
+	std::thread t3(&Rslam::visualizePose, this);
+	t1.join();
+	t3.join();
+}
+
 // Main loop for pose estimation
+int Rslam::singleThread() {
+	cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
+	cv::putText(im, "Main fetch thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
+	cv::imshow("Main", im);
+
+	bool isImuSettled = false;
+	bool dropFirstTimestamp = false;
+
+	device0.currentKeyframe = new Keyframe();
+	device0.keyframeExist = false;
+	device0.currentKeyframe->R = cv::Mat::zeros(3, 1, CV_64F);
+	device0.currentKeyframe->t = cv::Mat::zeros(3, 1, CV_64F);
+	device0.currentKeyframe->currentRelativeR = cv::Mat::zeros(3, 1, CV_64F);
+	device0.currentKeyframe->currentRelativeT = cv::Mat::zeros(3, 1, CV_64F);
+
+	device1.currentKeyframe = new Keyframe();
+	device1.keyframeExist = false;
+	device1.currentKeyframe->R = cv::Mat::zeros(3, 1, CV_64F);
+	device1.currentKeyframe->t = cv::Mat::zeros(3, 1, CV_64F);
+	device1.currentKeyframe->currentRelativeR = cv::Mat::zeros(3, 1, CV_64F);
+	device1.currentKeyframe->currentRelativeT = cv::Mat::zeros(3, 1, CV_64F);
+
+	while (true) {
+		char pressed = cv::waitKey(10);
+		if (pressed == 27) break;
+
+		// Poll framesets multi-camera (when any is available)
+		//if (!mutex.try_lock()) continue;
+		bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset));
+		//mutex.unlock();
+
+		if (!pollSuccess) continue;
+
+		auto gyroFrame = device0.frameset.first_or_default(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+		auto accelFrame = device0.frameset.first_or_default(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+		auto depthData = device0.frameset.get_depth_frame();
+		auto infrared1Data = device0.frameset.get_infrared_frame(1);
+		auto infrared2Data = device0.frameset.get_infrared_frame(2);
+		device0.gyroQueue.enqueue(gyroFrame);
+		device0.accelQueue.enqueue(accelFrame);
+		device0.depthQueue.enqueue(depthData);
+		device0.infrared1Queue.enqueue(infrared1Data);
+		device0.infrared2Queue.enqueue(infrared2Data);
+
+		// Let IMU settle first
+		if (!isImuSettled) {
+			if (!dropFirstTimestamp) {
+				if (processGyro(device0) && processAccel(device0)) {
+					// Compute initial imu orientation from accelerometer. set yaw to zero.
+					std::cout << device0.accel.x << " " << device0.accel.y << " " << device0.accel.z << std::endl;
+
+					//MALI TO!
+					float g = sqrtf(device0.accel.x * device0.accel.x + device0.accel.y * device0.accel.y + device0.accel.z*device0.accel.z);
+					float a_x = device0.accel.x / g;
+					float a_y = device0.accel.y / g;
+					float a_z = device0.accel.z / g;
+
+					float thetax = std::atan2f(a_y, a_z);
+					float thetaz = std::atan2f(a_y, a_x);
+					std::cout << thetax << " " << thetaz << std::endl;
+
+					glm::quat q(glm::vec3(thetax, 0.0f, -thetaz));
+					device0.ImuRotation = Quaternion(q.x, q.y, q.z, q.w);
+					dropFirstTimestamp = true;
+				}
+			}
+			else {
+				processGyro(device0);
+				processAccel(device0);
+				std::cout << "Settling" << std::endl;
+				if (settleImu(device0))
+					isImuSettled = true;
+			}
+		}
+		else {
+			if (!(processGyro(device0) && processAccel(device0)))
+			{
+				continue;
+			}
+			solveImuPose(device0);
+			updateViewerImuPose(device0);
+		}
+
+		if (pressed == 'r') {
+			device0.keyframeExist = false; // change this to automatic keyframing
+			device1.keyframeExist = false;
+		}
+
+		if (!(processDepth(device0) && processIr(device0))) continue;
+		upsampleDepth(device0);
+		visualizeDepth(device0);
+		createDepthThresholdMask(device0, 2.0f);
+
+		detectAndComputeOrb(device0);
+		//detectAndComputeOrb(device0.infrared1, device0.d_ir1, device0.keypointsIr1, device0.d_descriptorsIr1);
+		//detectAndComputeOrb(device1.infrared1, device1.d_ir1, device1.keypointsIr1, device1.d_descriptorsIr1);
+
+		// Match with keyframe
+		matchAndPose(device0);
+		//matchAndPose(device1);
+		visualizeRelativeKeypoints(device0.currentKeyframe, device0.infrared1, "dev0");
+		//visualizeRelativeKeypoints(device1.currentKeyframe, device1.infrared1, "dev1");
+
+		Device viewDevice = device0;
+		viewDevice.Rvec = viewDevice.currentKeyframe->currentRelativeR;
+		viewDevice.t = viewDevice.currentKeyframe->currentRelativeT;
+		this->Rvec = viewDevice.Rvec;
+		this->t = viewDevice.t;
+		cv::Mat im = cv::Mat::zeros(100, 300, CV_8UC3);
+		im.setTo(cv::Scalar(50, 50, 50));
+		overlayMatrix("pose", im, this->Rvec, this->t);
+
+		updateViewerCameraPose(device0);
+	}
+	return 0;
+}
+
 int Rslam::fetchFrames() {
 	cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
 	cv::putText(im, "Main fetch thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
@@ -354,6 +553,8 @@ int Rslam::cameraPoseSolver() {
 
 		if (!(processDepth(device0) && processIr(device0))) continue;
 		upsampleDepth(device0);
+		visualizeDepth(device0);
+		createDepthThresholdMask(device0, 1.0f);
 
 		detectAndComputeOrb(device0.infrared1, device0.d_ir1, device0.keypointsIr1, device0.d_descriptorsIr1);
 		//detectAndComputeOrb(device1.infrared1, device1.d_ir1, device1.keypointsIr1, device1.d_descriptorsIr1);
@@ -516,6 +717,14 @@ int Rslam::detectAndComputeOrb(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<c
 	return 0;
 }
 
+int Rslam::detectAndComputeOrb(Device& device) {
+	device.d_ir1.upload(device.infrared1);
+	device.d_mask.upload(device.mask);
+	orb->detectAndCompute(device.d_ir1, device.d_mask, device.keypointsIr1, device.d_descriptorsIr1);
+	//orb->compute(d_ir1, keypoints, descriptors);
+	return 0;
+}
+
 int Rslam::relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv::Mat currentFrame) {
 	if ((device.keypointsIr1.empty() || keyframe->keypoints.empty()) || (device.d_descriptorsIr1.cols <= 1) || (keyframe->d_descriptors.cols <= 1)) {
 		std::cout << "No keypoints found." << std::endl;
@@ -549,7 +758,7 @@ int Rslam::relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv:
 					double z = ((double)device.depth.at<short>(srcPt)) / 256.0;
 
 					// Remove distant objects
-					if (z < 10.0) {
+					/*if ((z > 0.0 ) && (z < 50.0)) {*/
 						// Solve 3D point
 						cv::Point3f src3dpt;
 						src3dpt.x = (float)(((double)srcPt.x - device.cx) * z / device.fx);
@@ -565,7 +774,7 @@ int Rslam::relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv:
 						keyframe->matchedPointsSrc.push_back(srcPt);
 
 						keyframe->matchedDistances.push_back(device.matches[k][0].distance);
-					}
+					//}
 				}
 			}
 		}
@@ -586,6 +795,16 @@ int Rslam::solveRelativePose(Device &device, Keyframe *keyframe) {
 		//cv::solvePnP(keyframe->objectPointsSrc, keyframe->matchedPoints, this->intrinsic, this->distCoeffs, keyframe->R, keyframe->t, false);
 	}
 	// Convert R and t to the current frame
+	return 0;
+}
+
+int Rslam::createDepthThresholdMask(Device& device, float maxDepth) {
+	//std::cout << device.depth32f.at<float>(320, 10) << std::endl;
+	cv::threshold(device.depth32f, device.mask, (double)maxDepth, 255, cv::THRESH_BINARY_INV);
+	device.mask.convertTo(device.mask, CV_8U);
+	//std::cout << device.mask.type() << " " << CV_8U << " " << CV_8UC1 << std::endl;
+	cv::imshow("thresh", device.mask);
+	//std::cout << device.depth32f.at<float>(100, 100) << std::endl;
 	return 0;
 }
 
@@ -642,7 +861,8 @@ bool Rslam::processAccel(Device &device) {
 bool Rslam::processDepth(Device &device) {
 	rs2::frame depthData;
 	if (device.depthQueue.poll_for_frame(&depthData)) {
-		device.depth = cv::Mat(cv::Size(width, height), CV_16S, (void*)depthData.get_data(), cv::Mat::AUTO_STEP);
+		device.depth = cv::Mat(cv::Size(width, height), CV_16U, (void*)depthData.get_data(), cv::Mat::AUTO_STEP);
+		//cv::imshow("just converted", device.depth);
 		return true;
 	}
 	else return false;
@@ -674,17 +894,18 @@ int Rslam::extractColor(Device &device) {
 }
 
 int Rslam::upsampleDepth(Device &device) {
-	//std::cout << device.depth.at<short int>(320, 160) << std::endl;
-	//cv::imshow("test1", device.depth);
-	device.depth.convertTo(device.depth32f, CV_32F, 1.0f / 256.0f);
+	device.depth.convertTo(device.depth32f, CV_32F, (double)device.depthScale);
+	//std::cout << device.depth32f.at<float>(320, 160) << std::endl;
+
 	upsampling->copyImagesToDevice(device.infrared132f, device.depth32f);
 	upsampling->propagateColorOnly();
-	//upsampling->solve();
+	////upsampling->solve();
 	upsampling->copyImagesToHost(device.depth32f);
-	//cv::imshow("test2", device.depth32f);
-	//cv::imshow("test", device.depth32f);
-	device.depth32f.convertTo(device.depth, CV_16S, 256.0f);
-	//cv::imshow("test2", device.depth);
+
+	
+	device.depth32f = device.depth32f * this->maxDepth;
+	//std::cout << device.depth32f.at<float>(320, 160) << std::endl;
+	device.depth32f.convertTo(device.depth, CV_16U, 1.0 / (double)device.depthScale);
 	return 0;
 }
 
@@ -922,7 +1143,7 @@ void Rslam::visualizeDepth(Device &device) {
 	cv::Mat cm_img0;
 	// Apply the colormap:
 	cv::Mat depth8u;
-	device.depth32f.convertTo(depth8u, CV_8UC1, 256.0f / this->maxDepth);
+	device.depth32f.convertTo(depth8u, CV_8UC1, 256.0f / 5.0f);
 	cv::applyColorMap(depth8u, cm_img0, cv::COLORMAP_JET);
 	// Show the result:
 	cv::imshow("cm_img0", cm_img0);

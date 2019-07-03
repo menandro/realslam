@@ -167,6 +167,7 @@ public:
 		cv::Mat infrared2;
 		cv::Mat infrared132f;
 		cv::Mat infrared232f;
+		float depthScale;
 
 		// For pose estimation
 		cv::cuda::GpuMat d_im;
@@ -184,6 +185,8 @@ public:
 		cv::Mat descriptorsIr1;
 		cv::Mat descriptorsIr2;
 		std::vector<std::vector<cv::DMatch>> matches;
+		cv::Mat mask;
+		cv::cuda::GpuMat d_mask;
 
 		double cx;
 		double cy;
@@ -220,6 +223,7 @@ public:
 	// MultiCamera fixed
 	Device device0;
 	Device device1;
+	Device externalImu;
 	std::string device0SN;
 	std::string device1SN;
 
@@ -258,7 +262,10 @@ public:
 	std::vector<Keyframe> keyframes;
 
 	int initialize(Settings settings, FeatureDetectionMethod featMethod, std::string device0SN, std::string device1SN);
+	int initializeFromFile(const char* filename0, const char* filenameImu);
 	int run(); // thread runner
+	int runFromRecording();
+	int singleThread();
 	int fetchFrames(); // frameset fetcher thread
 	int imuPoseSolver(); // imu thread
 	int cameraPoseSolver(); // camera thread
@@ -268,7 +275,9 @@ public:
 	bool settleImu(Device& device);
 	int matchAndPose(Device& device);
 	int solveRelativePose(Device& device, Keyframe *keyframe);
+	int createDepthThresholdMask(Device& device, float maxDepth);
 	int detectAndComputeOrb(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
+	int detectAndComputeOrb(Device& device);
 	int relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv::Mat currentFrame);
 	
 private:
