@@ -261,6 +261,11 @@ int Rslam::recordAll() {
 		if (isThisDevice(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER), "843112071357")) {
 			// d435 device, enable depth, 2IR, rgb, imu
 			std::cout << "Setting up config for 843112071357" << std::endl;
+			auto depth_sensor = dev.first<rs2::depth_sensor>();
+			if (depth_sensor.supports(RS2_OPTION_EMITTER_ENABLED))
+			{
+				depth_sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.0f); // Disable emitter
+			}
 			cfg.enable_stream(RS2_STREAM_DEPTH, 640, 360, rs2_format::RS2_FORMAT_Z16, 90);
 			cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 360, rs2_format::RS2_FORMAT_Y8, 90);
 			cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 360, rs2_format::RS2_FORMAT_Y8, 90);
@@ -281,8 +286,8 @@ int Rslam::recordAll() {
 	std::cout << "Press g: stop recording." << std::endl;
 	cv::Mat something = cv::imread("recording.png");
 	cv::namedWindow("test", cv::WINDOW_NORMAL);
-	HWND windowHandle = FindWindow(NULL, _T("test"));
-	SetForegroundWindow(windowHandle);
+	//HWND windowHandle = FindWindow(NULL, _T("test"));
+	//SetForegroundWindow(windowHandle);
 //	start = std::clock();
 	while (true) {
 		char pressed = cv::waitKey(10);
