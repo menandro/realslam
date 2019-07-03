@@ -251,7 +251,8 @@ int Rslam::run() {
 
 // Main loop for pose estimation
 int Rslam::fetchFrames() {
-	cv::Mat im = cv::Mat::zeros(100, 100, CV_8UC3);
+	cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
+	cv::putText(im, "Main fetch thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
 	cv::imshow("Main", im);
 	while (true) {
 		char pressed = cv::waitKey(10);
