@@ -258,20 +258,18 @@ public:
 	std::vector<Keyframe> keyframes;
 
 	int initialize(Settings settings, FeatureDetectionMethod featMethod, std::string device0SN, std::string device1SN);
-	int run(); // poseSolver thread
-	int fetchFrames();
-	int imuPoseSolver();
-	int cameraPoseSolver();
-	int poseSolverDefaultStereoMulti();
+	int run(); // thread runner
+	int fetchFrames(); // frameset fetcher thread
+	int imuPoseSolver(); // imu thread
+	int cameraPoseSolver(); // camera thread
+	int poseRefinement(); // keyframe pose refinement thread
+
 	int solveImuPose(Device& device);
 	bool settleImu(Device& device);
-	int solveCameraPose();
 	int matchAndPose(Device& device);
 	int solveRelativePose(Device& device, Keyframe *keyframe);
 	int detectAndComputeOrb(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
 	int relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv::Mat currentFrame);
-	
-	int createImuKeyframe(Device& device);
 	
 private:
 	int initialize(int width, int height, int fps);
@@ -281,17 +279,11 @@ private:
 	bool isThisDevice(std::string serialNo, std::string queryNo);
 
 public:
-	int recordAll();
-	int playback(const char* serialNumber);
-	
 	bool processGyro(Device &device);
 	bool processAccel(Device &device);
 	bool processDepth(Device &device);
 	bool processIr(Device &device);
 
-	int extractGyroAndAccel(Device &device);
-	int extractDepth(Device &device);
-	int extractIr(Device &device);
 	int upsampleDepth(Device &device);
 	int extractColor(Device &device);
 

@@ -232,104 +232,6 @@ int Rslam::initContainers(Device &device) {
 	return 0;
 }
 
-// Record feed from all available sensors
-int Rslam::recordAll() {
-	rs2::context context;
-	std::vector<rs2::pipeline> pipelines;
-	// Start a streaming pipe per each connected device
-	auto tt = context.query_devices();
-	std::cout << "Size " << tt.size() << std::endl;
-	/*rs2::device d435i;
-	rs2::device t265;*/
-	std::clock_t start;
-//	double duration;
-	// Start pipes as recorders
-	for (auto&& dev : context.query_devices())
-	{
-		rs2::pipeline pipe(context);
-		rs2::config cfg;
-		cfg.enable_device(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
-		std::string filename = dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
-		filename.append(".bag");
-		cfg.enable_record_to_file(filename);
-		if (isThisDevice(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER), "843112071357")) {
-			// d435 device, enable depth, 2IR, rgb, imu
-			cfg.disable_all_streams();
-			cfg.enable_stream(RS2_STREAM_DEPTH, 640, 360, rs2_format::RS2_FORMAT_Z16, 90);
-			cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 360, rs2_format::RS2_FORMAT_Y8, 90);
-			cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 360, rs2_format::RS2_FORMAT_Y8, 90);
-			cfg.enable_stream(RS2_STREAM_COLOR, 640, 360, RS2_FORMAT_BGR8, 60);
-			cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
-			cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
-		}
-		else {
-			// t265 device, imu
-			//cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
-			//cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
-		}
-		pipe.start(cfg);
-		pipelines.emplace_back(pipe);
-	}
-	std::cout << "Recording..." << std::endl;
-	std::cout << "Press g: stop recording." << std::endl;
-	cv::Mat something = cv::imread("recording.png");
-	cv::imshow("test", something);
-	start = std::clock();
-	while (true) {
-		char pressed = cv::waitKey(10);
-		if ((pressed == 27) || (pressed == 'g')) {// || ((std::clock() - start) / (double)CLOCKS_PER_SEC > 10.0)) {
-			std::cout << "Saving recording to file... ";
-			for (int k = 0; k < pipelines.size(); k++) {
-				pipelines[k].stop();
-			}
-			std::cout << "DONE." << std::endl;
-			break;
-		}
-	}
-	return 0;
-}
-
-int Rslam::playback(const char* serialNumber) {
-	try{
-		rs2::pipeline pipe;
-		rs2::config cfg;
-		cfg.enable_device_from_file(serialNumber);
-		pipe.start(cfg);
-		std::cout << "Pipe started" << std::endl;
-		const auto window_name = "Display Image";
-		cv::namedWindow(window_name, cv::WINDOW_AUTOSIZE);
-		rs2::colorizer color_map;
-
-		while (cv::waitKey(1) < 0 && cv::getWindowProperty(window_name, cv::WND_PROP_AUTOSIZE) >= 0)
-		{
-			rs2::frameset data = pipe.wait_for_frames(); // Wait for next set of frames from the camera
-			//std::cout << data.size() << std::endl;
-			rs2::frame depth = data.get_depth_frame().apply_filter(color_map);
-
-			// Query frame size (width and height)
-			const int w = depth.as<rs2::video_frame>().get_width();
-			const int h = depth.as<rs2::video_frame>().get_height();
-
-			// Create OpenCV matrix of size (w,h) from the colorized depth data
-			cv::Mat depthimage(cv::Size(w, h), CV_8UC3, (void*)depth.get_data(), cv::Mat::AUTO_STEP);
-
-			// Update the window with new data
-			cv::imshow(window_name, depthimage);
-		}
-		return EXIT_SUCCESS;
-	}
-	catch (const rs2::error & e)
-	{
-		std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
-		return EXIT_FAILURE;
-	}
-	catch (const std::exception& e)
-	{
-		std::cerr << e.what() << std::endl;
-		return EXIT_FAILURE;
-	}
-}
-
 // Thread calls
 int Rslam::run() {
 	//std::thread t1(&Rslam::visualizePose, this);
@@ -384,13 +286,6 @@ int Rslam::imuPoseSolver() {
 		char pressed = cv::waitKey(10);
 		if (pressed == 27) break;
 
-		// Poll framesets multi-camera (when any is available)
-		/*if (!mutex.try_lock()) continue;
-		bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset));
-		mutex.unlock();*/
-
-		//if (!pollSuccess) continue;
-
 		// Let IMU settle first
 		if (!isImuSettled) {
 			if (!dropFirstTimestamp) {
@@ -426,15 +321,9 @@ int Rslam::imuPoseSolver() {
 			{
 				continue;
 			}
-			//processGyro(device0);
-			//processAccel(device0);
 			solveImuPose(device0);
 			updateViewerImuPose(device0);
-
-			//solveCameraPose();
-			//updateViewerCameraPose(device0);
 		}
-		//visualizeImu();
 	}
 	return 0;
 }
@@ -462,15 +351,6 @@ int Rslam::cameraPoseSolver() {
 			device1.keyframeExist = false;
 		}
 
-		//if (!mutex.try_lock()) continue;
-		//// Poll framesets multi-camera (when any is available)
-		///*bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset) |
-		//	device1.pipe->poll_for_frames(&device1.frameset));*/
-		//bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset));
-		//mutex.unlock();
-		//if (!pollSuccess) continue;
-
-		//solveCameraPose();
 		if (!(processDepth(device0) && processIr(device0))) continue;
 		upsampleDepth(device0);
 
@@ -497,96 +377,11 @@ int Rslam::cameraPoseSolver() {
 	return 0;
 }
 
-int Rslam::poseSolverDefaultStereoMulti() {
-//	double last_ts[RS2_STREAM_COUNT];
-//	double dt[RS2_STREAM_COUNT];
-	std::clock_t start;
-
-	double timer = 0.0;
-	double fps, oldFps = 0.0;
-
-	cv::Mat prevInfrared1 = cv::Mat::zeros(cv::Size(this->width, this->height), CV_8UC1);
-	
-	// Placeholder TODO: move to per device
-	device0.currentKeyframe = new Keyframe();
-	device0.keyframeExist = false;
-	device0.currentKeyframe->R = cv::Mat::zeros(3, 1, CV_64F);
-	device0.currentKeyframe->t = cv::Mat::zeros(3, 1, CV_64F);
-	device0.currentKeyframe->currentRelativeR = cv::Mat::zeros(3, 1, CV_64F);
-	device0.currentKeyframe->currentRelativeT = cv::Mat::zeros(3, 1, CV_64F);
-	
-	device1.currentKeyframe = new Keyframe();
-	device1.keyframeExist = false;
-	device1.currentKeyframe->R = cv::Mat::zeros(3, 1, CV_64F);
-	device1.currentKeyframe->t = cv::Mat::zeros(3, 1, CV_64F);
-	device1.currentKeyframe->currentRelativeR = cv::Mat::zeros(3, 1, CV_64F);
-	device1.currentKeyframe->currentRelativeT = cv::Mat::zeros(3, 1, CV_64F);
-
-	bool isImuSettled = false;
-	bool dropFirstTimestamp = false;
-
-	while (true) {
-		char pressed = cv::waitKey(10);
-		if (pressed == 27) break;
-		if (pressed == 'r') {
-			device0.keyframeExist = false; // change this to automatic keyframing
-			device1.keyframeExist = false;
-		}
-
-		// Poll framesets multi-camera (when any is available)
-		/*bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset) | 
-			device1.pipe->poll_for_frames(&device1.frameset));*/
-		bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset));
-		if (!pollSuccess) continue;
-
-		start = std::clock();
-
-		// Let IMU settle first
-		if (!isImuSettled) {
-			if (!dropFirstTimestamp) {
-				extractGyroAndAccel(device0); // dump first timestamp
-				// Compute initial imu orientation from accelerometer. set yaw to zero.
-				std::cout << device0.accel.x << " " << device0.accel.y << " " << device0.accel.z << std::endl;
-
-				//MALI TO!
-				float g = sqrtf(device0.accel.x * device0.accel.x + device0.accel.y * device0.accel.y + device0.accel.z*device0.accel.z);
-				float a_x = device0.accel.x / g;
-				float a_y = device0.accel.y / g;
-				float a_z = device0.accel.z / g;
-				
-				float thetax = std::atan2f(a_y, a_z);
-				float thetaz = std::atan2f(a_y, a_x);
-				std::cout << thetax << " " << thetaz << std::endl;
-
-				glm::quat q(glm::vec3(thetax, 0.0f, -thetaz));
-				device0.ImuRotation = Quaternion(q.x, q.y, q.z, q.w);
-				//toQuaternion(Vector3(thetax, 0.0f, -thetaz), device0.ImuRotation);
-				//toQuaternion(Vector3(thetax, 0.0f, -thetaz), device0.ImuRotation);
-				dropFirstTimestamp = true;
-			}
-			else {
-				extractGyroAndAccel(device0);
-				if (settleImu(device0))
-					isImuSettled = true;
-			}
-		}
-		else {
-			extractGyroAndAccel(device0);
-			solveImuPose(device0);
-			updateViewerImuPose(device0);
-
-			//solveCameraPose();
-			//updateViewerCameraPose(device0);
-		}
-		//visualizeImu();
-
-		fps = 1 / ((std::clock() - start) / (double)CLOCKS_PER_SEC);
-		if (fps > 500.0f) fps = 500.0f;
-		oldFps = (fps + oldFps) / 2.0; // Running average
-		visualizeFps(oldFps);
-	}
-	return 0;
+int Rslam::poseRefinement() {
+	// Get current keyframe
+	// Align depths with previous known keyframe
 }
+
 
 bool Rslam::settleImu(Device &device) {
 	solveImuPose(device);
@@ -698,41 +493,6 @@ int Rslam::solveImuPose(Device &device) {
 	return 0;
 }
 
-int Rslam::solveCameraPose() {
-	// Get color and depth frames
-	extractDepth(device0);
-	extractIr(device0);
-	upsampleDepth(device0);
-
-	/*extractDepth(device1);
-	extractIr(device1);
-	upsampleDepth(device1);*/
-
-	//visualizeColor(device0);
-	//visualizeDepth(device0);
-
-	// Solve current frame keypoints nad descriptors
-	detectAndComputeOrb(device0.infrared1, device0.d_ir1, device0.keypointsIr1, device0.d_descriptorsIr1);
-	//detectAndComputeOrb(device1.infrared1, device1.d_ir1, device1.keypointsIr1, device1.d_descriptorsIr1);
-
-	// Match with keyframe
-	matchAndPose(device0);
-	//matchAndPose(device1);
-	visualizeRelativeKeypoints(device0.currentKeyframe, device0.infrared1, "dev0");
-	//visualizeRelativeKeypoints(device1.currentKeyframe, device1.infrared1, "dev1");
-
-	Device viewDevice = device0;
-	viewDevice.Rvec = viewDevice.currentKeyframe->currentRelativeR;
-	viewDevice.t = viewDevice.currentKeyframe->currentRelativeT;
-	this->Rvec = viewDevice.Rvec;
-	this->t = viewDevice.t;
-	cv::Mat im = cv::Mat::zeros(100, 300, CV_8UC3);
-	im.setTo(cv::Scalar(50, 50, 50));
-	overlayMatrix("pose", im, this->Rvec, this->t);
-
-	return 0;
-}
-
 int Rslam::matchAndPose(Device& device) {
 	if (!device.keyframeExist) {
 		device.currentKeyframe->im = device.infrared1.clone();
@@ -828,16 +588,6 @@ int Rslam::solveRelativePose(Device &device, Keyframe *keyframe) {
 	return 0;
 }
 
-int Rslam::createImuKeyframe(Device &device) {
-	/*if (!device.imuKeyframeExist) {
-		device.ImuRotation.x = 0.0f;
-		device.ImuRotation.y = 0.0f;
-		device.ImuRotation.z = 0.0f;
-		device.ImuRotation.w = 1.0f;
-	}*/
-	return 0;
-}
-
 // Process Frames
 bool Rslam::processGyro(Device &device) {
 	
@@ -916,79 +666,9 @@ bool Rslam::processIr(Device &device) {
 	return result1 & result2;
 }
 
-int Rslam::extractGyroAndAccel(Device &device) {
-	//std::cout << device.pipe->get_active_profile().get_device().get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
-	device.gyro.lastTs = device.gyro.ts;
-	
-	/*for (const rs2::frame& f : device.frameset) {
-		if (auto mf = f.as<rs2::motion_frame>()) {
-			if (mf.get_profile().stream_type() == RS2_STREAM_GYRO)
-				std::cout << std::fixed << mf.get_timestamp() << std::endl;
-		}
-	}*/
-
-	rs2::motion_frame gyroFrame = device.frameset.first_or_default(RS2_STREAM_GYRO);// , RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
-	rs2_vector gv = gyroFrame.get_motion_data();
-
-	device.gyro.ts = gyroFrame.get_timestamp();
-	device.gyro.dt = (device.gyro.ts - device.gyro.lastTs) / 1000.0;
-	device.gyro.x = gv.x - GYRO_BIAS_X;
-	device.gyro.y = gv.y - GYRO_BIAS_Y;
-	device.gyro.z = gv.z - GYRO_BIAS_Z;
-	
-	device.accel.lastTs = device.accel.ts;
-	rs2::motion_frame accelFrame = device.frameset.first_or_default(RS2_STREAM_ACCEL);// , RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
-	rs2_vector av = accelFrame.get_motion_data();
-	device.accel.ts = accelFrame.get_timestamp();
-	device.accel.dt = (device.accel.ts - device.accel.lastTs) / 1000.0;
-	device.accel.x = av.x;
-	device.accel.y = av.y;
-	device.accel.z = av.z;
-	
-	/*std::cout << std::fixed
-		<< device.gyro.ts << " " << device.gyro.lastTs << " "
-		<< device.gyro.dt << ": ("
-		<< device.gyro.x << ","
-		<< device.gyro.y << ","
-		<< device.gyro.z << " )"
-		<< device.accel.dt << ": ("
-		<< device.accel.x << " "
-		<< device.accel.y << " "
-		<< device.accel.z << ")"
-		<< std::endl;*/
-
-	//std::cout << (float)device.accel.dt << std::endl;
-	//float R = sqrtf(av.x * av.x + av.y * av.y + av.z * av.z);
-	//float newRoll = acos(av.x / R);
-	//float newYaw = acos(av.y / R);
-	//float newPitch = acos(av.z / R);
-	//std::cout << accel.dt << std::endl;
-	return 0;
-}
-
 int Rslam::extractColor(Device &device) {
 	auto colorData = device.frameset.get_color_frame();
 	device.color = cv::Mat(cv::Size(width, height), CV_8UC3, (void*)colorData.get_data(), cv::Mat::AUTO_STEP);
-	return 0;
-}
-
-int Rslam::extractDepth(Device &device) {
-	auto depthData = device.frameset.get_depth_frame();
-	//rs2::frame filtered = depthData;
-	//filtered = spatialFilter.process(filtered);
-	device.depth = cv::Mat(cv::Size(width, height), CV_16S, (void*)depthData.get_data(), cv::Mat::AUTO_STEP);
-	//device.depth = cv::Mat(cv::Size(width, height), CV_16S, (void*)filtered.get_data(), cv::Mat::AUTO_STEP);
-	return 0;
-}
-
-int Rslam::extractIr(Device &device) {
-	auto infrared1Data = device.frameset.get_infrared_frame(1);
-	device.infrared1 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared1Data.get_data(), cv::Mat::AUTO_STEP);
-	device.infrared1.convertTo(device.infrared132f, CV_32F, 1 / 256.0f);
-
-	auto infrared2Data = device.frameset.get_infrared_frame(2);
-	device.infrared2 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared2Data.get_data(), cv::Mat::AUTO_STEP);
-	device.infrared2.convertTo(device.infrared232f, CV_32F, 1 / 256.0f);
 	return 0;
 }
 
