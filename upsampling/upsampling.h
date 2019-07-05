@@ -111,7 +111,7 @@ namespace lup {
 		int copyImagesToHost(cv::Mat depth, cv::Mat propagated);
 		int copy3dToHost(cv::Mat X, cv::Mat Y, cv::Mat Z);
 
-		int propagateColorOnly();
+		int propagateColorOnly(int radius);
 		int solve();
 		int convertDepthTo3D(float focal, float cx, float cy); // convert depth to 3D points
 
@@ -147,7 +147,7 @@ namespace lup {
 			float tau, float* eta_u, float* eta_v1, float* eta_v2,
 			float alpha0, float alpha1, float* w, float* dw, float mu,
 			float* u, float2* v, float* u_s, float2* v_s);
-		void PropagateColorOnly(float* grad, float* lidar, float* depthOut);
+		void PropagateColorOnly(float* grad, float* lidar, float* depthOut, int radius);
 		void Gradient(float* input, float* output);
 		void PropagateNearestNeighbor(float* im, float* lidar, uchar3* semantic, float* motionStereo, float* depthOut);
 

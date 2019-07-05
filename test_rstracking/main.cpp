@@ -11,6 +11,10 @@ int main() {
 	rslam->initializeFromFile("H:/data_rs_iis/8431120713573.bag", "h:/data_rs_iis/8522121104493.bag");
 	rslam->runFromRecording();
 
+	// SAVE all files
+	/*Rslam* rslam = new Rslam();
+	rslam->saveAllFrames("H:/data_rs_iis/8431120713573.bag", "h:/data_rs_iis/8522121104493.bag", "H:/data_rs_iis/frames");*/
+
 	// Tracking using T265
 	//Rstracking * rstracking = new Rstracking();
 	//rstracking->initialize();

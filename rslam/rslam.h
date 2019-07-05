@@ -318,5 +318,8 @@ public:
 	void overlayMatrix(const char * windowName, cv::Mat &im, cv::Mat R1, cv::Mat t);
 	void overlayMatrixRot(const char* windowName, cv::Mat &im, Vector3 euler, Quaternion q);
 
+	int saveAllFrames(const char* filename0, const char* filenameImu, std::string outputFolder);
+	int saveAllFrames2(const char* filename0, const char* filenameImu, std::string outputFolder);
+
 	std::mutex mutex;
 };

@@ -196,11 +196,11 @@ int lup::Upsampling::copyImagesToDevice(cv::Mat rgb, cv::Mat gray, cv::Mat lidar
 	return 0;
 }
 
-int lup::Upsampling::propagateColorOnly() {
+int lup::Upsampling::propagateColorOnly(int radius) {
 	Gradient(d_gray0, d_grad);
 	//cudaMemset(d_depth0sub, 0, dataSize32f);
 	cudaMemset(d_depth0, 0, dataSize32f);
-	PropagateColorOnly(d_grad, d_lidar, d_depth0);
+	PropagateColorOnly(d_grad, d_lidar, d_depth0, radius);
 	//Clone(d_depth0sub, d_depth0);
 	return 0;
 }

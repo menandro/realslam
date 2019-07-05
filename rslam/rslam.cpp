@@ -369,12 +369,15 @@ int Rslam::singleThread() {
 		auto accelFrame = device0.frameset.first_or_default(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
 		auto depthData = device0.frameset.get_depth_frame();
 		auto infrared1Data = device0.frameset.get_infrared_frame(1);
-		auto infrared2Data = device0.frameset.get_infrared_frame(2);
+		//auto infrared2Data = device0.frameset.get_infrared_frame(2);
 		device0.gyroQueue.enqueue(gyroFrame);
 		device0.accelQueue.enqueue(accelFrame);
-		device0.depthQueue.enqueue(depthData);
+		/*device0.depthQueue.enqueue(depthData);
 		device0.infrared1Queue.enqueue(infrared1Data);
-		device0.infrared2Queue.enqueue(infrared2Data);
+		device0.infrared2Queue.enqueue(infrared2Data);*/
+		device0.depth = cv::Mat(cv::Size(width, height), CV_16U, (void*)depthData.get_data(), cv::Mat::AUTO_STEP);
+		device0.infrared1 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared1Data.get_data(), cv::Mat::AUTO_STEP);
+		device0.infrared1.convertTo(device0.infrared132f, CV_32F, 1 / 256.0f);
 
 		// Let IMU settle first
 		if (!isImuSettled) {
@@ -420,7 +423,7 @@ int Rslam::singleThread() {
 			device1.keyframeExist = false;
 		}
 
-		if (!(processDepth(device0) && processIr(device0))) continue;
+		//if (!(processDepth(device0) && processIr(device0))) continue;
 		upsampleDepth(device0);
 		visualizeDepth(device0);
 		createDepthThresholdMask(device0, 2.0f);
@@ -461,19 +464,36 @@ int Rslam::fetchFrames() {
 		//if (!mutex.try_lock()) continue;
 		bool pollSuccess = (device0.pipe->poll_for_frames(&device0.frameset));
 		//mutex.unlock();
-
+		//device0.frameset = device0.pipe->wait_for_frames();
 		if (!pollSuccess) continue;
 
 		auto gyroFrame = device0.frameset.first_or_default(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
 		auto accelFrame = device0.frameset.first_or_default(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
 		auto depthData = device0.frameset.get_depth_frame();
 		auto infrared1Data = device0.frameset.get_infrared_frame(1);
-		auto infrared2Data = device0.frameset.get_infrared_frame(2);
+		//auto infrared2Data = device0.frameset.get_infrared_frame(2);
 		device0.gyroQueue.enqueue(gyroFrame);
 		device0.accelQueue.enqueue(accelFrame);
-		device0.depthQueue.enqueue(depthData);
-		device0.infrared1Queue.enqueue(infrared1Data);
-		device0.infrared2Queue.enqueue(infrared2Data);
+		//device0.depthQueue.enqueue(depthData);
+		//device0.infrared1Queue.enqueue(infrared1Data);
+		//device0.infrared2Queue.enqueue(infrared2Data);
+		/*rs2_vector gv = gyroFrame.as<rs2::motion_frame>().get_motion_data();
+		device0.gyro.ts = gyroFrame.get_timestamp();
+		device0.gyro.dt = (device0.gyro.ts - device0.gyro.lastTs) / 1000.0;
+		device0.gyro.x = gv.x - GYRO_BIAS_X;
+		device0.gyro.y = gv.y - GYRO_BIAS_Y;
+		device0.gyro.z = gv.z - GYRO_BIAS_Z;
+
+		rs2_vector av = accelFrame.as<rs2::motion_frame>().get_motion_data();
+		device0.accel.ts = accelFrame.get_timestamp();
+		device0.accel.dt = (device0.accel.ts - device0.accel.lastTs) / 1000.0;
+		device0.accel.x = av.x;
+		device0.accel.y = av.y;
+		device0.accel.z = av.z;*/
+
+		device0.depth = cv::Mat(cv::Size(width, height), CV_16U, (void*)depthData.get_data(), cv::Mat::AUTO_STEP);
+		device0.infrared1 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared1Data.get_data(), cv::Mat::AUTO_STEP);
+		device0.infrared1.convertTo(device0.infrared132f, CV_32F, 1 / 256.0f);
 	}
 	return 0;
 }
@@ -551,7 +571,7 @@ int Rslam::cameraPoseSolver() {
 			device1.keyframeExist = false;
 		}
 
-		if (!(processDepth(device0) && processIr(device0))) continue;
+		//if (!(processDepth(device0) && processIr(device0))) continue;
 		upsampleDepth(device0);
 		visualizeDepth(device0);
 		createDepthThresholdMask(device0, 1.0f);
@@ -877,14 +897,14 @@ bool Rslam::processIr(Device &device) {
 		device.infrared1.convertTo(device.infrared132f, CV_32F, 1 / 256.0f);
 		result1 = true;
 	}	
-
-	rs2::frame infrared2Data;
+	return result1;
+	/*rs2::frame infrared2Data;
 	if (device.infrared2Queue.poll_for_frame(&infrared2Data)) {
 		device.infrared2 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared2Data.get_data(), cv::Mat::AUTO_STEP);
 		device.infrared2.convertTo(device.infrared232f, CV_32F, 1 / 256.0f);
 		result2 = true;
 	}
-	return result1 & result2;
+	return result1 & result2;*/
 }
 
 int Rslam::extractColor(Device &device) {
@@ -898,14 +918,13 @@ int Rslam::upsampleDepth(Device &device) {
 	//std::cout << device.depth32f.at<float>(320, 160) << std::endl;
 
 	upsampling->copyImagesToDevice(device.infrared132f, device.depth32f);
-	upsampling->propagateColorOnly();
-	////upsampling->solve();
+	upsampling->propagateColorOnly(10);
+	upsampling->solve();
 	upsampling->copyImagesToHost(device.depth32f);
 
-	
 	device.depth32f = device.depth32f * this->maxDepth;
 	//std::cout << device.depth32f.at<float>(320, 160) << std::endl;
-	device.depth32f.convertTo(device.depth, CV_16U, 1.0 / (double)device.depthScale);
+	//device.depth32f.convertTo(device.depth, CV_16U, 1.0 / (double)device.depthScale);
 	return 0;
 }
 
@@ -1228,5 +1247,223 @@ std::string Rslam::parseDecimal(double f, int precision) {
 	return string.str();
 }
 
+int Rslam::saveAllFrames(const char* filename0, const char* filenameImu, std::string outputFolder) {
+	try {
+		std::map<int, int> counters;
+		std::map<int, int> frameNumber;
+		std::map<int, std::string> stream_names;
+		std::mutex mutex;
 
+		auto callback = [&](const rs2::frame& frame)
+		{
+			std::lock_guard<std::mutex> lock(mutex);
+			if (rs2::frameset fs = frame.as<rs2::frameset>())
+			{
+				for (const rs2::frame& f : fs) {
+					counters[f.get_profile().unique_id()]++;
+					//frameNumber[f.get_profile().unique_id()] = f.get_frame_number();
+					std::cout << "fs " << f.get_profile().unique_id() << ":" << f.get_frame_number() << std::endl;
+					if (f.as<rs2::motion_frame>()) {
+						std::cout << "mo " << f.get_profile().unique_id() << ":" << f.get_frame_number() << std::endl;
+					}
+				}
+			}
+			else// if(frame.as<rs2::motion_frame>())
+			{
+				//if (frame.get_profile().unique_id() == 5)
+					//std::cout << frame.get_profile().unique_id() << ":" << frame.get_frame_number() << std::endl;
+				counters[frame.get_profile().unique_id()]++;
+				//frameNumber[frame.get_profile().unique_id()] = frame.get_frame_number();
+			}
+			/*for (auto p : counters)
+			{
+				std::cout << "[" << p.first << "]: " << p.second << " || ";
+			}
 
+			for (auto p : frameNumber) {
+				std::cout << "[" << p.first << "]:" << p.second << " || ";
+			}
+			std::cout << std::endl;*/
+		};
+
+		//auto callback = [&](const rs2::frame& frame)
+		//{
+		//	std::lock_guard<std::mutex> lock(mutex);
+		//	if (rs2::frameset fs = frame.as<rs2::frameset>())
+		//	{
+		//		// With callbacks, all synchronized stream will arrive in a single frameset
+		//		for (const rs2::frame& f : fs)
+		//			counters[f.get_profile().unique_id()]++;
+		//	}
+		//	else
+		//	{
+		//		// Stream that bypass synchronization (such as IMU) will produce single frames
+		//		counters[frame.get_profile().unique_id()]++;
+		//	}
+		//};
+
+		rs2::pipeline pipe;
+		rs2::config cfg;
+
+		cfg.enable_device_from_file(filename0);
+
+		device0.cfg.enable_stream(RS2_STREAM_DEPTH, 640, 360, rs2_format::RS2_FORMAT_Z16, 90);
+		device0.cfg.enable_stream(RS2_STREAM_COLOR, 640, 360, RS2_FORMAT_BGR8, 60);
+		device0.cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 360, RS2_FORMAT_Y8, 90);
+		device0.cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 360, RS2_FORMAT_Y8, 90);
+		device0.cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
+		device0.cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
+
+		rs2::pipeline_profile profiles = pipe.start(cfg, callback);
+		rs2::device device = profiles.get_device();
+		auto playback = device.as<rs2::playback>();
+		//playback.set_real_time(false);
+		playback.set_playback_speed(0.01);
+
+		for (auto p : profiles.get_streams()) {
+			stream_names[p.unique_id()] = p.stream_name();
+		}
+		
+		cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
+		cv::putText(im, "Main fetch thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
+		cv::imshow("Main", im);
+		cv::waitKey();
+
+		//while (true)
+		//{
+		//	char pressed = cv::waitKey(10);
+		//	if (pressed == 27) break;
+
+		//	std::this_thread::sleep_for(std::chrono::seconds(1));
+
+		//	std::lock_guard<std::mutex> lock(mutex);
+
+		//	//std::cout << "\r";
+		//	for (auto p : counters)
+		//	{
+		//		//std::cout << stream_names[p.first] << "[" << p.first << "]: " << p.second << " [frames] || ";
+		//		std::cout << "[" << p.first << "]: " << p.second << " || ";
+		//	}
+		//	/*for (auto p : frameNumber) {
+		//		std::cout << "[" << p.first << "]:" << p.second << " || ";
+		//	}*/
+		//	std::cout << std::endl;
+		//}
+
+		//while (true) {
+		//	char pressed = cv::waitKey(10);
+		//	if (pressed == 27) break;
+
+		//	bool pollSuccess = (pipe.poll_for_frames(&device.frameset));
+		//	if (!pollSuccess) continue;
+		//	//device.frameset = pipe.wait_for_frames();
+
+		//	auto gyroFrame = device.frameset.first_or_default(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+		//	auto accelFrame = device.frameset.first_or_default(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+
+		//	rs2_vector gv = gyroFrame.as<rs2::motion_frame>().get_motion_data();
+		//	device.gyro.ts = gyroFrame.get_timestamp();
+		//	device.gyro.dt = (device.gyro.ts - device.gyro.lastTs) / 1000.0;
+		//	device.gyro.x = gv.x - GYRO_BIAS_X;
+		//	device.gyro.y = gv.y - GYRO_BIAS_Y;
+		//	device.gyro.z = gv.z - GYRO_BIAS_Z;
+
+		//	rs2_vector av = accelFrame.as<rs2::motion_frame>().get_motion_data();
+		//	device.accel.ts = accelFrame.get_timestamp();
+		//	device.accel.dt = (device.accel.ts - device.accel.lastTs) / 1000.0;
+		//	device.accel.x = av.x;
+		//	device.accel.y = av.y;
+		//	device.accel.z = av.z;
+
+		//	rs2::depth_frame depthData = device.frameset.get_depth_frame();
+		//	rs2::video_frame infrared1Data = device.frameset.get_infrared_frame(1);
+		//	//device.depth = cv::Mat(cv::Size(width, height), CV_16U, (void*)depthData.get_data(), cv::Mat::AUTO_STEP);
+		//	//device.infrared1 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared1Data.get_data(), cv::Mat::AUTO_STEP);
+		//	//device.infrared1.convertTo(device0.infrared132f, CV_32F, 1 / 256.0f);
+
+		//	std::cout << std::fixed << device.gyro.ts << " " 
+		//		<< device.accel.ts << " " 
+		//		<< depthData.get_timestamp() << " " 
+		//		<< std::endl;
+		//}
+	}
+	catch (const rs2::error & e)
+	{
+		std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	return 0;
+}
+
+int Rslam::saveAllFrames2(const char* filename0, const char* filenameImu, std::string outputFolder) {
+	try {
+		rs2::pipeline pipe;
+		rs2::config cfg;
+
+		cfg.enable_device_from_file(filename0);
+		rs2::pipeline_profile profiles = pipe.start(cfg);
+		rs2::device device = profiles.get_device();
+
+		auto playback = device.as<rs2::playback>();
+		playback.set_real_time(false);
+		rs2::frameset frameset;
+
+		cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
+		cv::putText(im, "Main fetch thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
+		cv::imshow("Main", im);
+
+		std::map<int, int> counters;
+		std::map<int, int> frameNumber;
+
+		while (true)
+		{
+			char pressed = cv::waitKey(10);
+			if (pressed == 27) break;
+
+			if (!pipe.poll_for_frames(&frameset)) continue;
+
+			/*if (rs2::frameset fs = frameset.as<rs2::frameset>())
+			{
+				for (const rs2::frame& f : fs) {
+					counters[f.get_profile().unique_id()]++;
+					frameNumber[f.get_profile().unique_id()] = f.get_frame_number();
+				}
+			}
+			else
+			{
+				counters[fs.get_profile().unique_id()]++;
+				frameNumber[fs.get_profile().unique_id()] = fs.get_frame_number();
+			}*/
+			for (const rs2::frame& f : frameset) {
+				counters[f.get_profile().unique_id()]++;
+				frameNumber[f.get_profile().unique_id()] = f.get_frame_number();
+			}
+
+			for (auto p : counters)
+			{
+				//std::cout << stream_names[p.first] << "[" << p.first << "]: " << p.second << " [frames] || ";
+				std::cout << "[" << p.first << "]: " << p.second << " || ";
+			}
+			for (auto p : frameNumber) {
+				std::cout << "[" << p.first << "]:" << p.second << " {}{} ";
+			}
+			std::cout << std::endl;
+		}
+	}
+	catch (const rs2::error & e)
+	{
+		std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	return 0;
+}
