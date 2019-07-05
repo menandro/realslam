@@ -295,6 +295,8 @@ public:
 
 	int upsampleDepth(Device &device);
 	int extractColor(Device &device);
+	int adjustGamma(Device &device);
+	cv::Mat lookUpTable;
 
 	/// Utilities
 	void visualizeImu(Device &device);

@@ -143,6 +143,13 @@ int Rslam::initializeFromFile(const char* filename0, const char* filenameImu) {
 	this->fps = 90;
 	this->featMethod = ORB;
 
+	double gammaAdj = 0.5;
+	lookUpTable = cv::Mat(1, 256, CV_8U);
+	uchar* p = lookUpTable.ptr();
+	for (int i = 0; i < 256; ++i) {
+		p[i] = cv::saturate_cast<uchar>(pow(i / 255.0, gammaAdj) * 255.0);
+	}
+
 	try {
 		device0.pipe = new rs2::pipeline();
 		externalImu.pipe = new rs2::pipeline();
@@ -181,7 +188,7 @@ int Rslam::initializeFromFile(const char* filename0, const char* filenameImu) {
 	}
 	else if (featMethod == ORB) {
 		matcher = cv::cuda::DescriptorMatcher::createBFMatcher(cv::NORM_HAMMING); //for orb
-		orb = cv::cuda::ORB::create(500, 1.2f, 8);// , 10, 0, 2, 0, 10);
+		orb = cv::cuda::ORB::create(200, 1.2f, 8);// , 10, 0, 2, 0, 10);
 		orb->setBlurForDescriptor(true);
 		//orb = cv::cuda::ORB::create(200, 2.0f, 3, 10, 0, 2, 0, 10);
 	}
@@ -377,6 +384,8 @@ int Rslam::singleThread() {
 		device0.infrared2Queue.enqueue(infrared2Data);*/
 		device0.depth = cv::Mat(cv::Size(width, height), CV_16U, (void*)depthData.get_data(), cv::Mat::AUTO_STEP);
 		device0.infrared1 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared1Data.get_data(), cv::Mat::AUTO_STEP);
+		// Adjust gamma
+		//adjustGamma(device0);
 		device0.infrared1.convertTo(device0.infrared132f, CV_32F, 1 / 256.0f);
 
 		// Let IMU settle first
@@ -919,12 +928,19 @@ int Rslam::upsampleDepth(Device &device) {
 
 	upsampling->copyImagesToDevice(device.infrared132f, device.depth32f);
 	upsampling->propagateColorOnly(10);
-	upsampling->solve();
+	//upsampling->solve();
 	upsampling->copyImagesToHost(device.depth32f);
 
 	device.depth32f = device.depth32f * this->maxDepth;
 	//std::cout << device.depth32f.at<float>(320, 160) << std::endl;
 	//device.depth32f.convertTo(device.depth, CV_16U, 1.0 / (double)device.depthScale);
+	return 0;
+}
+
+int Rslam::adjustGamma(Device &device) {
+	cv::Mat res = device.infrared1.clone();
+	cv::LUT(device.infrared1, lookUpTable, device.infrared1);
+	cv::imshow("gamma adjust", device.infrared1);
 	return 0;
 }
 
@@ -1127,7 +1143,7 @@ void Rslam::updateViewerImuPose(Device &device) {
 
 void Rslam::visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir1, std::string windowNamePrefix) {
 	cv::Mat imout1, imout2;
-	cv::drawKeypoints(keyframe->im, keyframe->matchedKeypoints, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DEFAULT);
+	cv::drawKeypoints(keyframe->im, keyframe->keypoints, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DEFAULT);
 	cv::putText(imout1, "detected keypoints: " + parseDecimal((double)keyframe->keypoints.size(), 0), cv::Point(0, 10), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
 	cv::putText(imout1, "matched keypoints: " + parseDecimal((double)keyframe->matchedKeypoints.size(), 0), cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
 	cv::imshow(windowNamePrefix + "keyframe", imout1);
