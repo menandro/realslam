@@ -7,6 +7,14 @@ int Rslam::initialize(int width, int height, int fps) {
 	this->height = height;
 	this->fps = fps;
 
+	// Gamma adjustment
+	double gammaAdj = 0.5;
+	lookUpTable = cv::Mat(1, 256, CV_8U);
+	uchar* p = lookUpTable.ptr();
+	for (int i = 0; i < 256; ++i) {
+		p[i] = cv::saturate_cast<uchar>(pow(i / 255.0, gammaAdj) * 255.0);
+	}
+
 	try {
 		ctx = new rs2::context();
 		//pipe = new rs2::pipeline(*ctx);
@@ -502,6 +510,7 @@ int Rslam::fetchFrames() {
 
 		device0.depth = cv::Mat(cv::Size(width, height), CV_16U, (void*)depthData.get_data(), cv::Mat::AUTO_STEP);
 		device0.infrared1 = cv::Mat(cv::Size(width, height), CV_8UC1, (void*)infrared1Data.get_data(), cv::Mat::AUTO_STEP);
+		adjustGamma(device0);
 		device0.infrared1.convertTo(device0.infrared132f, CV_32F, 1 / 256.0f);
 	}
 	return 0;
