@@ -322,6 +322,8 @@ public:
 
 	int saveAllFrames(const char* filename0, const char* filenameImu, std::string outputFolder);
 	int saveAllFrames2(const char* filename0, const char* filenameImu, std::string outputFolder);
+	int saveAllFrames3(const char* filename0, const char* filenameImu, std::string outputFolder);
+	int saveAllFramesFinal(const char* filename0, const char* filenameImu, std::string outputFolder);
 
 	std::mutex mutex;
 };

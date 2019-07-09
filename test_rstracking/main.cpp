@@ -2,18 +2,18 @@
 
 int main() {
 	// SLAM USING D435i-Live
-	Rslam* rslam = new Rslam();
+	/*Rslam* rslam = new Rslam();
 	rslam->initialize(Rslam::D435I_IR_640_360_90, Rslam::ORB, "843112071357", "841612070674");
-	rslam->run();
+	rslam->run();*/
 
 	// SLAM USING D435i-Recorded
 	/*Rslam* rslam = new Rslam();
-	rslam->initializeFromFile("H:/data_rs_iis/8431120713573.bag", "h:/data_rs_iis/8522121104493.bag");
+	rslam->initializeFromFile("H:/data_rs_iis/20190709/bag/8431120713573.bag", "h:/data_rs_iis/20190709/bag/8522121104493.bag");
 	rslam->runFromRecording();*/
 
 	// SAVE all files
-	/*Rslam* rslam = new Rslam();
-	rslam->saveAllFrames("H:/data_rs_iis/8431120713573.bag", "h:/data_rs_iis/8522121104493.bag", "H:/data_rs_iis/frames");*/
+	Rslam* rslam = new Rslam();
+	rslam->saveAllFramesFinal("H:/data_rs_iis/20190709/bag/8431120713574.bag", "h:/data_rs_iis/20190709/bag/8522121104494.bag", "H:/data_rs_iis/frames");
 
 	// Tracking using T265
 	//Rstracking * rstracking = new Rstracking();
