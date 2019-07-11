@@ -160,15 +160,24 @@ int Rslam::initializeFromFile(const char* filename0, const char* filenameImu) {
 
 	try {
 		device0.pipe = new rs2::pipeline();
+		device0.cfg.enable_device_from_file(filename0, false);
+		rs2::pipeline_profile profiled435i = device0.pipe->start(device0.cfg);
+		rs2::device deviced435i = profiled435i.get_device();
+		auto playbackd435i = deviced435i.as<rs2::playback>();
+		playbackd435i.set_real_time(false);
+		
 		externalImu.pipe = new rs2::pipeline();
-		device0.cfg.enable_device_from_file(filename0);
-		externalImu.cfg.enable_device_from_file(filenameImu);
+		externalImu.cfg.enable_device_from_file(filenameImu, false);
+		externalImu.cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 62);
+		externalImu.cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200);
+		rs2::pipeline_profile profilet265 = externalImu.pipe->start(externalImu.cfg);
+		rs2::device devicet265 = profilet265.get_device();
+		auto playbackt265 = devicet265.as<rs2::playback>();
+		playbackt265.set_real_time(false);
 
-		device0.pipe->start(device0.cfg);
 		device0.depthScale = device0.pipe->get_active_profile().get_device()
 			.query_sensors().front().as<rs2::depth_sensor>().get_depth_scale();
 		std::cout << "Depth scale: " << device0.depthScale << std::endl;
-		externalImu.pipe->start(device1.cfg);
 
 		std::cout << "Pipes started." << std::endl;
 	}
@@ -196,7 +205,7 @@ int Rslam::initializeFromFile(const char* filename0, const char* filenameImu) {
 	}
 	else if (featMethod == ORB) {
 		matcher = cv::cuda::DescriptorMatcher::createBFMatcher(cv::NORM_HAMMING); //for orb
-		orb = cv::cuda::ORB::create(500, 1.2f, 8, 10, 0, 2, 0, 10);
+		orb = cv::cuda::ORB::create(2000, 2.0f, 2);// , 10, 0, 2, 0, 10);
 		orb->setBlurForDescriptor(true);
 		//orb = cv::cuda::ORB::create(200, 2.0f, 3, 10, 0, 2, 0, 10);
 	}
@@ -1272,52 +1281,90 @@ std::string Rslam::parseDecimal(double f, int precision) {
 	return string.str();
 }
 
-int Rslam::saveAllFrames(const char* filename0, const char* filenameImu, std::string outputFolder) {
-	Device d435i;
-	Device t265;
+int Rslam::callbackTest(const char* filename0, const char* filenameImu, std::string outputFolder) {
 	try {
 		std::map<int, int> counters;
 		std::map<int, int> frameNumber;
 		std::map<int, std::string> stream_names;
 		std::mutex mutex;
 
+		std::ofstream accelFile(outputFolder + "accel.csv");
+		accelFile << "x,y,z,ts,frame" << std::endl;
+		std::ofstream gyroFile(outputFolder + "gyro.csv");
+		gyroFile << "x,y,z,ts,frame" << std::endl;
+
 		auto callback = [&](const rs2::frame& frame)
 		{
-			std::lock_guard<std::mutex> lock(mutex);
+			//std::lock_guard<std::mutex> lock(mutex);
 			if (rs2::frameset fs = frame.as<rs2::frameset>())
 			{
 				for (const rs2::frame& f : fs) {
 					// Save depth, infrared1, infrared2
-					std::cout << f.get_profile().unique_id() << ":" << f.get_frame_number() << " ";
+					//std::cout << f.get_profile().unique_id() << ":" << f.get_frame_number() << " ";
 				}
 			}
 			else
 			{
 				// Save gyro, accel
-				std::cout << frame.get_profile().unique_id() << ":" << frame.get_frame_number() << " ";
+				if (frame.get_profile().stream_type() == RS2_STREAM_GYRO 
+					&& frame.get_profile().format() == RS2_FORMAT_MOTION_XYZ32F)
+				{
+					auto gyroFrame = frame.as<rs2::motion_frame>();
+					rs2_vector gv = gyroFrame.get_motion_data();
+					gyroFile << std::fixed 
+						<< gv.x << "," 
+						<< gv.y << "," 
+						<< gv.z << "," 
+						<< gyroFrame.get_timestamp() << "," 
+						<< frame.get_frame_number() 
+						<< std::endl;
+					std::cout << frame.get_profile().unique_id() << ":" << frame.get_frame_number() << " ";
+				}
+				else if (frame.get_profile().stream_type() == RS2_STREAM_ACCEL 
+					&& frame.get_profile().format() == RS2_FORMAT_MOTION_XYZ32F) {
+					auto accelFrame = frame.as<rs2::motion_frame>();
+					rs2_vector gv = accelFrame.get_motion_data();
+					accelFile << std::fixed
+						<< gv.x << ","
+						<< gv.y << ","
+						<< gv.z << ","
+						<< accelFrame.get_timestamp() << ","
+						<< frame.get_frame_number()
+						<< std::endl;
+					std::cout << frame.get_profile().unique_id() << ":" << frame.get_frame_number() << " ";
+				}
+				//std::cout << frame.get_profile().unique_id() << ":" << frame.get_frame_number() << " ";
 			}
-			std::cout << std::endl;
+			std::cout << "\r";
 		};
 
 		rs2::pipeline pipe;
 		rs2::config cfg;
 
-		cfg.enable_device_from_file(filename0);
+		cfg.enable_device_from_file(filename0, false);
 		/*d435i.cfg.enable_stream(RS2_STREAM_DEPTH, 640, 360, rs2_format::RS2_FORMAT_Z16, 90);
 		d435i.cfg.enable_stream(RS2_STREAM_COLOR, 640, 360, RS2_FORMAT_BGR8, 60);
 		d435i.cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 360, RS2_FORMAT_Y8, 90);
-		d435i.cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 360, RS2_FORMAT_Y8, 90);
-		d435i.cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
-		d435i.cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);*/
+		d435i.cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 360, RS2_FORMAT_Y8, 90);*/
+		cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
+		cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
 
 		rs2::pipeline_profile profiles = pipe.start(cfg, callback);
 		rs2::device device = profiles.get_device();
 		auto playback = device.as<rs2::playback>();
 		//playback.set_playback_speed(0.1);
-		playback.set_real_time(false);
+		//playback.set_real_time(false);
 		
-		while (true);
+		cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
+		cv::putText(im, "Main fetch thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
+		cv::imshow("Main", im);
+		while (true) {
+			char pressed = cv::waitKey(10);
+			if (pressed == 27) break;
+		}
 
+		gyroFile.close();
+		accelFile.close();
 		/*cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
 		cv::putText(im, "Main fetch thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
 		cv::imshow("Main", im);
@@ -1336,6 +1383,153 @@ int Rslam::saveAllFrames(const char* filename0, const char* filenameImu, std::st
 	}
 	return 0;
 }
+
+int Rslam::callbackTestExternal(const char* filename0, const char* filenameImu, std::string outputFolder) {
+	try {
+		std::map<int, int> counters;
+		std::map<int, int> frameNumber;
+		std::map<int, std::string> stream_names;
+		std::mutex mutex;
+
+		std::ofstream accelFile(outputFolder + "externalAccelTest.csv");
+		accelFile << "x,y,z,ts,frame" << std::endl;
+		std::ofstream gyroFile(outputFolder + "externalGyroTest.csv");
+		gyroFile << "x,y,z,ts,frame" << std::endl;
+
+		auto callback = [&](const rs2::frame& frame)
+		{
+			//std::lock_guard<std::mutex> lock(mutex);
+			if (auto motion = frame.as<rs2::motion_frame>())
+			{
+				// Save gyro, accel
+				if (motion.get_profile().stream_type() == RS2_STREAM_GYRO
+					&& motion.get_profile().format() == RS2_FORMAT_MOTION_XYZ32F)
+				{
+					auto gyroFrame = motion.as<rs2::motion_frame>();
+					rs2_vector gv = gyroFrame.get_motion_data();
+					gyroFile << std::fixed
+						<< gv.x << ","
+						<< gv.y << ","
+						<< gv.z << ","
+						<< gyroFrame.get_timestamp() << ","
+						<< motion.get_frame_number()
+						<< std::endl;
+					std::cout << motion.get_profile().unique_id() << ":" << motion.get_frame_number() << " ";
+				}
+				else if (motion.get_profile().stream_type() == RS2_STREAM_ACCEL
+					&& motion.get_profile().format() == RS2_FORMAT_MOTION_XYZ32F) {
+					auto accelFrame = motion.as<rs2::motion_frame>();
+					rs2_vector gv = accelFrame.get_motion_data();
+					accelFile << std::fixed
+						<< gv.x << ","
+						<< gv.y << ","
+						<< gv.z << ","
+						<< accelFrame.get_timestamp() << ","
+						<< motion.get_frame_number()
+						<< std::endl;
+					std::cout << motion.get_profile().unique_id() << ":" << motion.get_frame_number() << " ";
+				}
+			}
+			std::cout << "\r";
+		};
+
+		rs2::pipeline pipe;
+		rs2::config cfg;
+
+		cfg.enable_device_from_file(filenameImu, false);
+		cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 62);
+		cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200);
+
+		rs2::pipeline_profile profiles = pipe.start(cfg, callback);
+		rs2::device device = profiles.get_device();
+		auto playback = device.as<rs2::playback>();
+		//playback.set_playback_speed(0.1);
+		//playback.set_real_time(false);
+
+		cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
+		cv::putText(im, "Main fetch thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
+		cv::imshow("Main", im);
+		while (true) {
+			char pressed = cv::waitKey(10);
+			if (pressed == 27) break;
+		}
+
+		gyroFile.close();
+		accelFile.close();
+	}
+	catch (const rs2::error & e)
+	{
+		std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	return 0;
+}
+
+int Rslam::callbackImuOnlyTest(const char* filename0, const char* filenameImu, std::string outputFolder) {
+	Device d435i;
+	Device t265;
+	try {
+		std::ofstream gyroTestFile(outputFolder + "gyroTestFile.csv");
+		gyroTestFile << "x,y,z,ts,frame" << std::endl;
+		
+		rs2::pipeline pipe;
+		rs2::config cfg;
+
+		cfg.enable_device_from_file(filename0, false);
+		cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
+		cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
+		//pipe.start(cfg).get_device().as<rs2::playback>().set_real_time(false);
+		//pipe.stop();
+		
+		auto profile = pipe.start(cfg, [&](rs2::frame frame)
+		{
+			auto motion = frame.as<rs2::motion_frame>();
+			if (motion && motion.get_profile().stream_type() == RS2_STREAM_GYRO && motion.get_profile().format() == RS2_FORMAT_MOTION_XYZ32F)
+			{
+				double ts = motion.get_timestamp();
+				rs2_vector gv = motion.get_motion_data();
+				gyroTestFile << std::fixed
+					<< gv.x << ","
+					<< gv.y << ","
+					<< gv.z << ","
+					<< ts << ","
+					<< frame.get_frame_number()
+					<< std::endl;
+			}
+			if (motion && motion.get_profile().stream_type() == RS2_STREAM_ACCEL && motion.get_profile().format() == RS2_FORMAT_MOTION_XYZ32F)
+			{
+				rs2_vector accel_data = motion.get_motion_data();
+			}
+		});
+
+		cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
+		cv::putText(im, "Main fetch thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
+		cv::imshow("Main", im);
+		while (true) {
+			char pressed = cv::waitKey(10);
+			if (pressed == 27) break;
+		};
+		gyroTestFile.close();
+
+	}
+	catch (const rs2::error & e)
+	{
+		std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	return 0;
+}
+
 
 int Rslam::saveAllFrames3(const char* filename0, const char* filenameImu, std::string outputFolder) {
 	try {
@@ -1566,72 +1760,110 @@ int Rslam::saveAllFramesFinal(const char* filename0, const char* filenameImu, st
 	Device t265;
 	try {
 		d435i.pipe = new rs2::pipeline();
-		d435i.cfg.enable_device_from_file(filename0);
+		d435i.cfg.enable_device_from_file(filename0, false);
 		rs2::pipeline_profile profiled435i = d435i.pipe->start(d435i.cfg);
 		rs2::device deviced435i = profiled435i.get_device();
 		auto playbackd435i = deviced435i.as<rs2::playback>();
-		//playbackd435i.set_real_time(false);
+		playbackd435i.set_real_time(false);
 		//playbackd435i.set_playback_speed(0.005f);
 
 		t265.pipe = new rs2::pipeline();
-		t265.cfg.enable_device_from_file(filenameImu);
+		t265.cfg.enable_device_from_file(filenameImu, false);
 		t265.cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 62);
 		t265.cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200);
 		rs2::pipeline_profile profilet265 = t265.pipe->start(t265.cfg);
 		rs2::device devicet265 = profilet265.get_device();
 		auto playbackt265 = devicet265.as<rs2::playback>();
-		//playbackt265.set_real_time(false);
+		playbackt265.set_real_time(false);
 		//playbackt265.set_playback_speed(0.005f);
+
+		rs2::colorizer color_map;
 
 		cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
 		cv::putText(im, "Main fetch thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
 		cv::imshow("Main", im);
+		int depthCnt = 0;
+		int ir1Cnt = 0;
+		int ir2Cnt = 0;
+		int accelCnt = 0;
+		int gyroCnt = 0;
+		int externalGyroCnt = 0;
+		int externalAccelCnt = 0;
+
+		// Open gyro and accel files x, y, z, timestamp
+		/*std::ofstream gyroFile(outputFolder + "gyroFrameset.csv");
+		std::ofstream accelFile(outputFolder + "accelFrameset.csv");
+		std::ofstream imageTimestampFile(outputFolder + "infrared1/timestamp.csv");
+		std::ofstream depthTimestampFile(outputFolder + "depth/timestamp.csv");*/
+		std::ofstream externalGyroFile(outputFolder + "externalgyroT.csv");
+		std::ofstream externalAccelFile(outputFolder + "externalaccelT.csv");
+
+		/*gyroFile << "x,y,z,ts" << std::endl;
+		accelFile << "x,y,z,ts" << std::endl;*/
+		externalAccelFile << "x,y,z,ts,frame" << std::endl;
+		externalGyroFile << "x,y,z,ts,frame" << std::endl;
 
 		while (true)
 		{
 			char pressed = cv::waitKey(10);
 			if (pressed == 27) break;
 
-			if (d435i.pipe->poll_for_frames(&d435i.frameset)) {
-				std::cout << "d435:: ";
-				// Get matching timestamps here
-				//auto accelFrame = d435i.frameset.first_or_default(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
-				//std::cout << std::fixed << accelFrame.get_timestamp() << std::endl;
+			//if (d435i.pipe->poll_for_frames(&d435i.frameset)) {
+			//	// Save image timestamp
+			//	imageTimestampFile << std::fixed << d435i.frameset.get_infrared_frame(1).get_timestamp() << std::endl;
+			//	depthTimestampFile << std::fixed << d435i.frameset.get_depth_frame().get_timestamp() << std::endl;
 
-				// Save all frames here
-				for (const rs2::frame& f : d435i.frameset) {
-					// Save depth as 16-bit
-					// Save infrared1
-					// Save infrared2
-					// Save gyro and timestamp
-					// Save accel and timestamp
-					//std::cout << f.get_profile().unique_id() << ":" << f.get_frame_number() << " || ";
-				}
-				//std::cout << std::endl;
-			}
-			
+			//	// Save gyro with timestamp
+			//	auto gyroFrame = d435i.frameset.first_or_default(RS2_STREAM_GYRO,
+			//		RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+			//	rs2_vector gv = gyroFrame.get_motion_data();
+			//	gyroFile << std::fixed << gv.x << "," << gv.y << "," << gv.z << "," << gyroFrame.get_timestamp() << std::endl;
+
+			//	// Save accel with timestamp
+			//	auto accelFrame = d435i.frameset.first_or_default(RS2_STREAM_ACCEL,
+			//		RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+			//	rs2_vector av = accelFrame.get_motion_data();
+			//	accelFile << std::fixed << av.x << "," << av.y << "," << av.z << "," << accelFrame.get_timestamp() << std::endl;
+			//	
+			//	accelCnt++;
+			//}
+
 
 			if (t265.pipe->poll_for_frames(&t265.frameset)) {
-			//t265.pipe->wait_for_frames();
-				std::cout << "t265:: ";
-				// Get matching timestamps here
-				//auto accelFrame = t265.frameset.first_or_default(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
-				//std::cout << std::fixed << accelFrame.get_timestamp() << std::endl;
+				// Save gyro with timestamp
+				auto gyroFrame = t265.frameset.first_or_default(RS2_STREAM_GYRO,
+					RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+				rs2_vector gv = gyroFrame.get_motion_data();
+				externalGyroFile << std::fixed 
+					<< gv.x << "," 
+					<< gv.y << "," 
+					<< gv.z << "," 
+					<< gyroFrame.get_timestamp() << ","
+					<< gyroFrame.get_frame_number() << ","
+					<< std::endl;
 
-				// Save all frames here
-				for (const rs2::frame& f : t265.frameset) {
-					// Save depth as 16-bit
-					// Save infrared1
-					// Save infrared2
-					// Save gyro and timestamp
-					// Save accel and timestamp
-					std::cout << f.get_profile().unique_id() << ":" << f.get_frame_number() << " || ";
-				}
-				//std::cout << std::endl;
+				// Save accel with timestamp
+				auto accelFrame = t265.frameset.first_or_default(RS2_STREAM_ACCEL,
+					RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+				rs2_vector av = accelFrame.get_motion_data();
+				externalAccelFile << std::fixed 
+					<< av.x << "," 
+					<< av.y << "," 
+					<< av.z << "," 
+					<< accelFrame.get_timestamp() << "," 
+					<< accelFrame.get_frame_number() << "," 
+					<< std::endl;
+				externalAccelCnt++;
 			}
-			
-			
+			std::cout << "\r";
+			std::cout << "frames: " << accelCnt << " " << externalAccelCnt ;
 		}
+		/*accelFile.close();
+		gyroFile.close();
+		imageTimestampFile.close();
+		depthTimestampFile.close();*/
+		externalGyroFile.close();
+		externalAccelFile.close();
 	}
 	catch (const rs2::error & e)
 	{
@@ -1645,3 +1877,311 @@ int Rslam::saveAllFramesFinal(const char* filename0, const char* filenameImu, st
 	}
 	return 0;
 }
+
+int Rslam::getSynchronization(const char* filename0, const char* filenameImu, std::string outputFolder) {
+	Device d435i;
+	Device t265;
+	try {
+		std::cout << "Loading file..." << std::endl;
+		d435i.pipe = new rs2::pipeline();
+		d435i.cfg.enable_device_from_file(filename0, false);
+		rs2::pipeline_profile profiled435i = d435i.pipe->start(d435i.cfg);
+		rs2::device deviced435i = profiled435i.get_device();
+		auto playbackd435i = deviced435i.as<rs2::playback>();
+		playbackd435i.set_real_time(true);
+		//playbackd435i.set_playback_speed(0.005f);
+
+		t265.pipe = new rs2::pipeline();
+		t265.cfg.enable_device_from_file(filenameImu, false);
+		t265.cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 62);
+		t265.cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200);
+		rs2::pipeline_profile profilet265 = t265.pipe->start(t265.cfg);
+		rs2::device devicet265 = profilet265.get_device();
+		auto playbackt265 = devicet265.as<rs2::playback>();
+		playbackt265.set_real_time(true);
+		//playbackt265.set_playback_speed(0.005f);
+
+		rs2::colorizer color_map;
+
+		cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
+		cv::putText(im, "Main fetch thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
+		cv::imshow("Main", im);
+		int depthCnt = 0;
+		int ir1Cnt = 0;
+		int ir2Cnt = 0;
+		int accelCnt = 0;
+		int gyroCnt = 0;
+		int externalGyroCnt = 0;
+		int externalAccelCnt = 0;
+
+		// Open gyro and accel files x, y, z, timestamp
+		std::ofstream syncFile(outputFolder + "sync.csv");
+		syncFile << "depth,image,accel,gyro,externalAccel,externalGyro" << std::endl;
+
+		while (true)
+		{
+			char pressed = cv::waitKey(10);
+			if (pressed == 27) break;
+			double depthTs, imageTs, accelTs, gyroTs, externalAccelTs, externalGyroTs;
+
+			if (d435i.pipe->poll_for_frames(&d435i.frameset)) {
+				imageTs = d435i.frameset.get_infrared_frame(1).get_timestamp();
+				depthTs = d435i.frameset.get_depth_frame().get_timestamp();
+
+				// Save gyro with timestamp
+				auto gyroFrame = d435i.frameset.first_or_default(RS2_STREAM_GYRO,
+					RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+				rs2_vector gv = gyroFrame.get_motion_data();
+				gyroTs = gyroFrame.get_timestamp();
+
+				// Save accel with timestamp
+				auto accelFrame = d435i.frameset.first_or_default(RS2_STREAM_ACCEL,
+					RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+				rs2_vector av = accelFrame.get_motion_data();
+				accelTs = accelFrame.get_timestamp();
+
+				//for (const rs2::frame& f : d435i.frameset) {
+				//	// Save depth as 16-bit
+				//	if (f.is<rs2::depth_frame>()) {
+				//		
+				//	}
+				//	if (f.is<rs2::depth_frame>()) {
+				//		
+				//	}
+				//	// Save infrared1
+				//	// Save infrared2
+				//	// Save gyro and timestamp
+				//	// Save accel and timestamp
+				//	//std::cout << f.get_profile().unique_id() << ":" << f.get_frame_number() << " || ";
+				//}
+				//std::cout << std::endl;
+				accelCnt++;
+			}
+
+
+			if (t265.pipe->poll_for_frames(&t265.frameset)) {
+				// Save gyro with timestamp
+				auto gyroFrame = t265.frameset.first_or_default(RS2_STREAM_GYRO,
+					RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+				rs2_vector gv = gyroFrame.get_motion_data();
+				externalGyroTs = gyroFrame.get_timestamp();
+
+				// Save accel with timestamp
+				auto accelFrame = t265.frameset.first_or_default(RS2_STREAM_ACCEL,
+					RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+				rs2_vector av = accelFrame.get_motion_data();
+				externalAccelTs = accelFrame.get_timestamp();
+
+				//t265.pipe->wait_for_frames();
+					//std::cout << "t265:: ";
+					//// Get matching timestamps here
+					////auto accelFrame = t265.frameset.first_or_default(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+					////std::cout << std::fixed << accelFrame.get_timestamp() << std::endl;
+
+					//// Save all frames here
+					//for (const rs2::frame& f : t265.frameset) {
+					//	// Save depth as 16-bit
+					//	// Save infrared1
+					//	// Save infrared2
+					//	// Save gyro and timestamp
+					//	// Save accel and timestamp
+					//	std::cout << f.get_profile().unique_id() << ":" << f.get_frame_number() << " || ";
+					//}
+					//std::cout << std::endl;
+				externalAccelCnt++;
+			}
+			syncFile << std::fixed
+				<< depthTs << ","
+				<< imageTs << ","
+				<< accelTs << ","
+				<< gyroTs << ","
+				<< externalAccelTs << ","
+				<< externalGyroTs << ","
+				<< std::endl;
+
+			std::cout << "\r";
+			std::cout << "frames: " << accelCnt << " " << externalAccelCnt;
+		}
+		syncFile.close();
+	}
+	catch (const rs2::error & e)
+	{
+		std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	return 0;
+}
+
+
+
+
+
+
+//int Rslam::saveAllFramesFinal(const char* filename0, const char* filenameImu, std::string outputFolder) {
+//	Device d435i;
+//	Device t265;
+//	try {
+//		d435i.pipe = new rs2::pipeline();
+//		d435i.cfg.enable_device_from_file(filename0, false);
+//		rs2::pipeline_profile profiled435i = d435i.pipe->start(d435i.cfg);
+//		rs2::device deviced435i = profiled435i.get_device();
+//		auto playbackd435i = deviced435i.as<rs2::playback>();
+//		playbackd435i.set_real_time(false);
+//		//playbackd435i.set_playback_speed(0.005f);
+//
+//		t265.pipe = new rs2::pipeline();
+//		t265.cfg.enable_device_from_file(filenameImu, false);
+//		t265.cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 62);
+//		t265.cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200);
+//		rs2::pipeline_profile profilet265 = t265.pipe->start(t265.cfg);
+//		rs2::device devicet265 = profilet265.get_device();
+//		auto playbackt265 = devicet265.as<rs2::playback>();
+//		playbackt265.set_real_time(false);
+//		//playbackt265.set_playback_speed(0.005f);
+//
+//		rs2::colorizer color_map;
+//
+//		cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
+//		cv::putText(im, "Main fetch thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
+//		cv::imshow("Main", im);
+//		int depthCnt = 0;
+//		int ir1Cnt = 0;
+//		int ir2Cnt = 0;
+//		int accelCnt = 0;
+//		int gyroCnt = 0;
+//		int externalGyroCnt = 0;
+//		int externalAccelCnt = 0;
+//
+//		// Open gyro and accel files x, y, z, timestamp
+//		std::ofstream gyroFile(outputFolder + "gyroFrameset.csv");
+//		std::ofstream accelFile(outputFolder + "accelFrameset.csv");
+//		std::ofstream imageTimestampFile(outputFolder + "infrared1/timestamp.csv");
+//		std::ofstream depthTimestampFile(outputFolder + "depth/timestamp.csv");
+//		std::ofstream externalGyroFile(outputFolder + "externalgyro.csv");
+//		std::ofstream externalAccelFile(outputFolder + "externalaccel.csv");
+//
+//		gyroFile << "x,y,z,ts" << std::endl;
+//		accelFile << "x,y,z,ts" << std::endl;
+//		externalAccelFile << "x,y,z,ts" << std::endl;
+//		externalGyroFile << "x,y,z,ts" << std::endl;
+//
+//		while (true)
+//		{
+//			char pressed = cv::waitKey(10);
+//			if (pressed == 27) break;
+//
+//			if (d435i.pipe->poll_for_frames(&d435i.frameset)) {
+//				//std::cout << "d435:: ";
+//				// Get matching timestamps here
+//				//auto accelFrame = d435i.frameset.first_or_default(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+//				//std::cout << std::fixed << accelFrame.get_timestamp() << std::endl;
+//
+//				// Save image frames here
+//				/*d435i.depth = cv::Mat(cv::Size(640, 360), CV_16U, (void*)d435i.frameset.get_depth_frame().get_data(), cv::Mat::AUTO_STEP);
+//				cv::imwrite(outputFolder + "depth/" + std::to_string(depthCnt) + ".png", d435i.depth);
+//				d435i.depth = cv::Mat(cv::Size(640, 360), CV_8UC3, (void*)d435i.frameset.get_depth_frame().apply_filter(color_map).get_data(), cv::Mat::AUTO_STEP);
+//				cv::imwrite(outputFolder + "depthvis/" + std::to_string(depthCnt) + ".png", d435i.depth);
+//				depthCnt++;
+//
+//				d435i.infrared1 = cv::Mat(cv::Size(640, 360), CV_8UC1, (void*)d435i.frameset.get_infrared_frame(1).get_data(), cv::Mat::AUTO_STEP);
+//				cv::imwrite(outputFolder + "infrared1/" + std::to_string(ir1Cnt) + ".png", d435i.infrared1);
+//				ir1Cnt++;
+//				cv::imshow("ir1", d435i.infrared1);
+//
+//				std::cout << "\r";
+//				std::cout << "frames: " << ir1Cnt;*/
+//
+//				// Save image timestamp
+//				imageTimestampFile << std::fixed << d435i.frameset.get_infrared_frame(1).get_timestamp() << std::endl;
+//				depthTimestampFile << std::fixed << d435i.frameset.get_depth_frame().get_timestamp() << std::endl;
+//
+//				// Save gyro with timestamp
+//				auto gyroFrame = d435i.frameset.first_or_default(RS2_STREAM_GYRO,
+//					RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+//				rs2_vector gv = gyroFrame.get_motion_data();
+//				gyroFile << std::fixed << gv.x << "," << gv.y << "," << gv.z << "," << gyroFrame.get_timestamp() << std::endl;
+//
+//				// Save accel with timestamp
+//				auto accelFrame = d435i.frameset.first_or_default(RS2_STREAM_ACCEL,
+//					RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+//				rs2_vector av = accelFrame.get_motion_data();
+//				accelFile << std::fixed << av.x << "," << av.y << "," << av.z << "," << accelFrame.get_timestamp() << std::endl;
+//
+//				accelCnt++;
+//
+//				//for (const rs2::frame& f : d435i.frameset) {
+//				//	// Save depth as 16-bit
+//				//	if (f.is<rs2::depth_frame>()) {
+//				//		
+//				//	}
+//				//	if (f.is<rs2::depth_frame>()) {
+//				//		
+//				//	}
+//				//	// Save infrared1
+//				//	// Save infrared2
+//				//	// Save gyro and timestamp
+//				//	// Save accel and timestamp
+//				//	//std::cout << f.get_profile().unique_id() << ":" << f.get_frame_number() << " || ";
+//				//}
+//				//std::cout << std::endl;
+//			}
+//
+//
+//			if (t265.pipe->poll_for_frames(&t265.frameset)) {
+//				// Save gyro with timestamp
+//				auto gyroFrame = t265.frameset.first_or_default(RS2_STREAM_GYRO,
+//					RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+//				rs2_vector gv = gyroFrame.get_motion_data();
+//				externalGyroFile << std::fixed << gv.x << "," << gv.y << "," << gv.z << "," << gyroFrame.get_timestamp() << std::endl;
+//
+//				// Save accel with timestamp
+//				auto accelFrame = t265.frameset.first_or_default(RS2_STREAM_ACCEL,
+//					RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+//				rs2_vector av = accelFrame.get_motion_data();
+//				externalAccelFile << std::fixed << av.x << "," << av.y << "," << av.z << "," << accelFrame.get_timestamp() << std::endl;
+//				externalAccelCnt++;
+//
+//				//t265.pipe->wait_for_frames();
+//					//std::cout << "t265:: ";
+//					//// Get matching timestamps here
+//					////auto accelFrame = t265.frameset.first_or_default(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F).as<rs2::motion_frame>();
+//					////std::cout << std::fixed << accelFrame.get_timestamp() << std::endl;
+//
+//					//// Save all frames here
+//					//for (const rs2::frame& f : t265.frameset) {
+//					//	// Save depth as 16-bit
+//					//	// Save infrared1
+//					//	// Save infrared2
+//					//	// Save gyro and timestamp
+//					//	// Save accel and timestamp
+//					//	std::cout << f.get_profile().unique_id() << ":" << f.get_frame_number() << " || ";
+//					//}
+//					//std::cout << std::endl;
+//			}
+//			std::cout << "\r";
+//			std::cout << "frames: " << accelCnt << " " << externalAccelCnt;
+//		}
+//		accelFile.close();
+//		gyroFile.close();
+//		imageTimestampFile.close();
+//		depthTimestampFile.close();
+//		externalGyroFile.close();
+//		externalAccelFile.close();
+//	}
+//	catch (const rs2::error & e)
+//	{
+//		std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+//		return EXIT_FAILURE;
+//	}
+//	catch (const std::exception& e)
+//	{
+//		std::cerr << e.what() << std::endl;
+//		return EXIT_FAILURE;
+//	}
+//	return 0;
+//}

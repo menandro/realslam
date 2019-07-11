@@ -7,13 +7,23 @@ int main() {
 	rslam->run();*/
 
 	// SLAM USING D435i-Recorded
-	/*Rslam* rslam = new Rslam();
-	rslam->initializeFromFile("H:/data_rs_iis/20190709/bag/8431120713573.bag", "h:/data_rs_iis/20190709/bag/8522121104493.bag");
-	rslam->runFromRecording();*/
+	Rslam* rslam = new Rslam();
+	rslam->initializeFromFile("H:/data_rs_iis/20190710/bag/84311207135711.bag", "h:/data_rs_iis/20190710/bag/85221211044911.bag");
+	rslam->runFromRecording();
 
 	// SAVE all files
-	Rslam* rslam = new Rslam();
-	rslam->saveAllFramesFinal("H:/data_rs_iis/20190709/bag/8431120713574.bag", "h:/data_rs_iis/20190709/bag/8522121104494.bag", "H:/data_rs_iis/frames");
+	/*Rslam* rslam = new Rslam();
+	rslam->saveAllFramesFinal("H:/data_rs_iis/20190710/bag/84311207135711.bag",
+		"h:/data_rs_iis/20190710/bag/85221211044911.bag",
+		"H:/data_rs_iis/20190710/");*/
+
+	/*rslam->saveAllFramesFinal("H:/data_rs_iis/20190710/bag/84311207135711.bag", 
+		"h:/data_rs_iis/20190710/bag/85221211044911.bag", 
+		"H:/data_rs_iis/20190710/");*/
+
+	/*rslam->getSynchronization("H:/data_rs_iis/20190710/bag/84311207135711.bag",
+		"h:/data_rs_iis/20190710/bag/85221211044911.bag",
+		"H:/data_rs_iis/20190710/");*/
 
 	// Tracking using T265
 	//Rstracking * rstracking = new Rstracking();
