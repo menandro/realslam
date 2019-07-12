@@ -320,13 +320,16 @@ public:
 	void overlayMatrix(const char * windowName, cv::Mat &im, cv::Mat R1, cv::Mat t);
 	void overlayMatrixRot(const char* windowName, cv::Mat &im, Vector3 euler, Quaternion q);
 
-	int callbackTest(const char* filename0, const char* filenameImu, std::string outputFolder);
-	int callbackTestExternal(const char* filename0, const char* filenameImu, std::string outputFolder);
+	int saveImu(const char* filename0, const char* filenameImu, std::string outputFolder);
+	int saveExternalImu(const char* filename0, const char* filenameImu, std::string outputFolder);
+	int getSynchronization(const char* filename0, const char* filenameImu, std::string outputFolder);
+	int saveAllDepthAndInfrared(const char* filename0, const char* filenameImu, std::string outputFolder);
+
+	// Trash
 	int callbackImuOnlyTest(const char* filename0, const char* filenameImu, std::string outputFolder);
 	int saveAllFrames2(const char* filename0, const char* filenameImu, std::string outputFolder);
 	int saveAllFrames3(const char* filename0, const char* filenameImu, std::string outputFolder);
-	int saveAllFramesFinal(const char* filename0, const char* filenameImu, std::string outputFolder);
-	int getSynchronization(const char* filename0, const char* filenameImu, std::string outputFolder);
+	int wrongSaveFrames(const char* filename0, const char* filenameImu, std::string outputFolder);
 
 	std::mutex mutex;
 };
