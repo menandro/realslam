@@ -1,6 +1,6 @@
 #pragma once
 #include <librealsense2\rs.hpp>
-#include <camerapose\CameraPose.h>
+//#include <camerapose\CameraPose.h>
 #include <opencv2/opencv.hpp>
 #include "lib_link.h"
 #include <viewer\Viewer.h>
@@ -9,6 +9,8 @@
 #include <thread>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <opencv2/xfeatures2d/cuda.hpp>
+#include <opencv2/cudafeatures2d.hpp>
 
 class Rslam {
 public:
@@ -324,12 +326,6 @@ public:
 	int saveExternalImu(const char* filename0, const char* filenameImu, std::string outputFolder);
 	int getSynchronization(const char* filename0, const char* filenameImu, std::string outputFolder);
 	int saveAllDepthAndInfrared(const char* filename0, const char* filenameImu, std::string outputFolder);
-
-	// Trash
-	int callbackImuOnlyTest(const char* filename0, const char* filenameImu, std::string outputFolder);
-	int saveAllFrames2(const char* filename0, const char* filenameImu, std::string outputFolder);
-	int saveAllFrames3(const char* filename0, const char* filenameImu, std::string outputFolder);
-	int wrongSaveFrames(const char* filename0, const char* filenameImu, std::string outputFolder);
 
 	std::mutex mutex;
 };

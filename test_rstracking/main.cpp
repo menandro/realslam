@@ -13,9 +13,19 @@ int main() {
 
 	// SAVE all files
 	Rslam* rslam = new Rslam();
-	rslam->saveAllFramesFinal("H:/data_rs_iis/20190710/bag/84311207135711.bag",
-		"h:/data_rs_iis/20190710/bag/85221211044911.bag",
-		"H:/data_rs_iis/20190710/");
+	std::string fileset = "12";
+	rslam->saveAllDepthAndInfrared(std::string("H:/data_rs_iis/20190710/bag/843112071357" + fileset + ".bag").c_str(),
+		std::string("h:/data_rs_iis/20190710/bag/852212110449" + fileset + ".bag").c_str(),
+		std::string("H:/data_rs_iis/20190710/" + fileset + "/").c_str());
+	/*rslam->saveImu(std::string("H:/data_rs_iis/20190710/bag/843112071357" + fileset + ".bag").c_str(),
+		std::string("h:/data_rs_iis/20190710/bag/852212110449" + fileset + ".bag").c_str(),
+		std::string("H:/data_rs_iis/20190710/" + fileset + "/").c_str());*/
+	/*rslam->saveExternalImu(std::string("H:/data_rs_iis/20190710/bag/843112071357" + fileset + ".bag").c_str(),
+		std::string("h:/data_rs_iis/20190710/bag/852212110449" + fileset + ".bag").c_str(),
+		std::string("H:/data_rs_iis/20190710/" + fileset + "/").c_str());*/
+	/*rslam->getSynchronization(std::string("H:/data_rs_iis/20190710/bag/843112071357" + fileset + ".bag").c_str(),
+		std::string("h:/data_rs_iis/20190710/bag/852212110449" + fileset + ".bag").c_str(),
+		std::string("H:/data_rs_iis/20190710/" + fileset + "/").c_str());*/
 
 	/*rslam->saveAllFramesFinal("H:/data_rs_iis/20190710/bag/84311207135711.bag", 
 		"h:/data_rs_iis/20190710/bag/85221211044911.bag", 
