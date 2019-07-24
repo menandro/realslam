@@ -258,9 +258,10 @@ int Rslam::recordAll() {
 		filename.append(suffix);
 		filename.append(".bag");
 		cfg.enable_record_to_file(filename);
-		if (isThisDevice(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER), "843112071357")) {
+		if (isThisDevice(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER), "843112071357"))
+		{
 			// d435 device, enable depth, 2IR, rgb, imu
-			std::cout << "Setting up config for 843112071357" << std::endl;
+			std::cout << "Setting up config for " << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
 			auto depth_sensor = dev.first<rs2::depth_sensor>();
 			if (depth_sensor.supports(RS2_OPTION_EMITTER_ENABLED))
 			{
@@ -273,6 +274,18 @@ int Rslam::recordAll() {
 			cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 250);
 			cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 400);
 			//std::cout << cfg.get() << std::endl;
+		}
+		else if (isThisDevice(dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER), "801212070810")) {
+			std::cout << "Setting up config for " << dev.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER) << std::endl;
+			auto depth_sensor = dev.first<rs2::depth_sensor>();
+			if (depth_sensor.supports(RS2_OPTION_EMITTER_ENABLED))
+			{
+				depth_sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.0f); // Disable emitter
+			}
+			cfg.enable_stream(RS2_STREAM_DEPTH, 640, 360, rs2_format::RS2_FORMAT_Z16, 90);
+			cfg.enable_stream(RS2_STREAM_INFRARED, 1, 640, 360, rs2_format::RS2_FORMAT_Y8, 90);
+			cfg.enable_stream(RS2_STREAM_INFRARED, 2, 640, 360, rs2_format::RS2_FORMAT_Y8, 90);
+			cfg.enable_stream(RS2_STREAM_COLOR, 640, 360, RS2_FORMAT_BGR8, 60);
 		}
 		else {
 			// t265 device, imu
