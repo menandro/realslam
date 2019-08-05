@@ -328,4 +328,7 @@ public:
 	int saveAllDepthAndInfrared(const char* filename0, const char* filenameImu, std::string outputFolder);
 
 	std::mutex mutex;
+
+	/// Tests
+	int testT265();
 };

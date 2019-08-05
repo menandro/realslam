@@ -1,6 +1,15 @@
 #include <rslam\rslam.h>
+#include <tslam/Tslam.h>
 
 int main() {
+	// ICRA Paper
+	Tslam *tslam = new Tslam();
+	tslam->initialize("852212110449");
+	tslam->run();
+
+	/*Rslam* rslam = new Rslam();
+	rslam->testT265();*/
+
 	// SLAM USING D435i-Live
 	/*Rslam* rslam = new Rslam();
 	rslam->initialize(Rslam::D435I_IR_640_360_90, Rslam::ORB, "843112071357", "841612070674");
@@ -12,11 +21,11 @@ int main() {
 	rslam->runFromRecording();*/
 
 	// SAVE all files
-	Rslam* rslam = new Rslam();
+	/*Rslam* rslam = new Rslam();
 	std::string fileset = "12";
 	rslam->saveAllDepthAndInfrared(std::string("H:/data_rs_iis/20190710/bag/843112071357" + fileset + ".bag").c_str(),
 		std::string("h:/data_rs_iis/20190710/bag/852212110449" + fileset + ".bag").c_str(),
-		std::string("H:/data_rs_iis/20190710/" + fileset + "/").c_str());
+		std::string("H:/data_rs_iis/20190710/" + fileset + "/").c_str());*/
 	/*rslam->saveImu(std::string("H:/data_rs_iis/20190710/bag/843112071357" + fileset + ".bag").c_str(),
 		std::string("h:/data_rs_iis/20190710/bag/852212110449" + fileset + ".bag").c_str(),
 		std::string("H:/data_rs_iis/20190710/" + fileset + "/").c_str());*/

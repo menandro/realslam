@@ -247,10 +247,10 @@ int Rslam::initialize(Settings settings) {
 	int width, height, fps;
 	double cx, cy, fx, fy;
 	if (settings == T265) {
-		fx = 614.122;
-		fy = 614.365;
-		cx = 427.388;
-		cy = 238.478;
+		fx = 285.722;
+		fy = 286.759;
+		cx = 420.135;
+		cy = 403.394;
 		width = 640;
 		height = 480;
 		fps = 60;
@@ -528,6 +528,10 @@ int Rslam::fetchFrames() {
 int Rslam::imuPoseSolver() {
 	bool isImuSettled = false;
 	bool dropFirstTimestamp = false;
+
+	cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
+	cv::putText(im, "IMU pose thread.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
+	cv::imshow("IMU", im);
 	
 	while (true) {
 		char pressed = cv::waitKey(10);
@@ -1693,4 +1697,42 @@ int Rslam::saveAllDepthAndInfrared(const char* filename0, const char* filenameIm
 		return EXIT_FAILURE;
 	}
 	return 0;
+}
+
+int Rslam::testT265() {
+	try {
+		rs2::context ctx;
+		rs2::pipeline pipe(ctx);
+		rs2::config cfg;
+		auto dev = ctx.query_devices();
+		cfg.enable_device("852212110449");
+		pipe.start(cfg);
+
+		cv::namedWindow("fisheye1", cv::WINDOW_AUTOSIZE);
+		cv::namedWindow("fisheye2", cv::WINDOW_AUTOSIZE);
+
+		while (cv::waitKey(1) < 0 && cv::getWindowProperty("fisheye1", cv::WND_PROP_AUTOSIZE) >= 0)
+		{
+			rs2::frameset frameset = pipe.wait_for_frames();
+			auto fisheye1 = frameset.get_fisheye_frame(1);
+			auto fisheye2 = frameset.get_fisheye_frame(2);
+			const int w = fisheye1.as<rs2::video_frame>().get_width();
+			const int h = fisheye1.as<rs2::video_frame>().get_height();
+			cv::Mat fs1(cv::Size(w, h), CV_8UC1, (void*)fisheye1.get_data(), cv::Mat::AUTO_STEP);
+			cv::Mat fs2(cv::Size(w, h), CV_8UC1, (void*)fisheye2.get_data(), cv::Mat::AUTO_STEP);
+			cv::imshow("fisheye1", fs1);
+			cv::imshow("fisheye2", fs2);
+		}
+		return EXIT_SUCCESS;
+	}
+	catch (const rs2::error & e)
+	{
+		std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
 }
