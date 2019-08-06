@@ -2,6 +2,11 @@
 
 int Tslam::initialize(const char* serialNumber) {
 	viewer = new Viewer();
+	stereo = new Stereo();
+	stereo->initializeOpticalFlow(848, 800, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 1, 100);
+	stereo->visualizeResults = true;
+	stereo->flowScale = 50.0f;
+
 	try {
 		ctx = new rs2::context();
 		auto dev = ctx->query_devices();
@@ -93,6 +98,27 @@ int Tslam::fetchFrames() {
 		t265.fisheye2 = cv::Mat(cv::Size(t265.width, t265.height), CV_8UC1, (void*)fisheye2Data.get_data(), cv::Mat::AUTO_STEP);
 		/*cv::imshow("fisheye1", t265.fisheye1);
 		cv::imshow("fisheye2", t265.fisheye2);*/
+
+		// test undistortion: CORRECT!!!
+		//cv::Mat undistorted;
+		//double intrinsic[9] = { 285.722, 0, 420.135, 0, 286.759, 403.394, 0, 0, 1 };
+		//double focal = 120;
+		////double intrinsicNew[9] = { focal, 0, 320.729, 0, focal,  181.862, 0, 0, 1 };
+		//double intrinsicNew[9] = { focal, 0, 320.729, 0, focal,  320.729, 0, 0, 1 };
+		////double distortion[4] = { -0.00659769,0.0473251, -0.0458264, 0.00897725};
+		//double distortion[4] = { -0.00659769, 0.0473251, -0.0458264, 0.00897725 };
+		//cv::Mat intMat = cv::Mat(3, 3, CV_64F, intrinsic).clone();
+		//cv::Mat intNewMat = cv::Mat(3, 3, CV_64F, intrinsicNew).clone();
+		//cv::Mat distCoeffs = cv::Mat(1, 4, CV_64F, distortion).clone();
+		//cv::fisheye::undistortImage(t265.fisheye1, undistorted, intMat, distCoeffs, intNewMat, cv::Size(640,640));
+		//cv::imshow("fisheyeundist", undistorted);
+
+		// Test Optical Flow
+		stereo->copyImagesToDevice(t265.fisheye1, t265.fisheye2);
+		stereo->solveOpticalFlow();
+		cv::Mat uvrgb = cv::Mat(t265.height, t265.width, CV_32FC3);
+		stereo->copyOpticalFlowVisToHost(uvrgb);
+		cv::imshow("flow", uvrgb);
 	}
 	return 0;
 }
@@ -108,7 +134,7 @@ int Tslam::cameraPoseSolver() {
 	// Create fisheye mask
 	t265.fisheyeMask = cv::Mat::zeros(cv::Size(848, 800), CV_8UC1);
 	circle(t265.fisheyeMask, cv::Point(424, 400), 385, cv::Scalar(256.0f), -1);
-	cv::imshow("fisheye mask", t265.fisheyeMask);
+	//cv::imshow("fisheye mask", t265.fisheyeMask);
 	t265.d_fisheyeMask.upload(t265.fisheyeMask);
 
 	while (true) {

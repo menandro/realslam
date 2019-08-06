@@ -15,6 +15,7 @@ Device: T265
 #include <glm/gtx/quaternion.hpp>
 #include <opencv2/xfeatures2d/cuda.hpp>
 #include <opencv2/cudafeatures2d.hpp>
+#include <stereo/stereo.h>
 
 class Tslam {
 public:
@@ -164,6 +165,9 @@ public:
 
 	// Viewer
 	Viewer* viewer;
+
+	// Stereo
+	Stereo* stereo;
 
 	// SLAM
 	cv::Ptr<cv::cuda::ORB> orb;
