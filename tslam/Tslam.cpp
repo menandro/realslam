@@ -102,7 +102,7 @@ int Tslam::fetchFrames() {
 		// test undistortion: CORRECT!!!
 		//cv::Mat undistorted;
 		//double intrinsic[9] = { 285.722, 0, 420.135, 0, 286.759, 403.394, 0, 0, 1 };
-		//double focal = 120;
+		//double focal = 321.902;// 120;
 		////double intrinsicNew[9] = { focal, 0, 320.729, 0, focal,  181.862, 0, 0, 1 };
 		//double intrinsicNew[9] = { focal, 0, 320.729, 0, focal,  320.729, 0, 0, 1 };
 		////double distortion[4] = { -0.00659769,0.0473251, -0.0458264, 0.00897725};
@@ -110,8 +110,10 @@ int Tslam::fetchFrames() {
 		//cv::Mat intMat = cv::Mat(3, 3, CV_64F, intrinsic).clone();
 		//cv::Mat intNewMat = cv::Mat(3, 3, CV_64F, intrinsicNew).clone();
 		//cv::Mat distCoeffs = cv::Mat(1, 4, CV_64F, distortion).clone();
-		//cv::fisheye::undistortImage(t265.fisheye1, undistorted, intMat, distCoeffs, intNewMat, cv::Size(640,640));
+		//cv::fisheye::undistortImage(t265.fisheye1, undistorted, intMat, distCoeffs, intNewMat, cv::Size(640,360));
 		//cv::imshow("fisheyeundist", undistorted);
+		//cv::imwrite("fisheyeundist.png", undistorted);
+		//cv::imwrite("fisheye.png", t265.fisheye1);
 
 		// Test Optical Flow
 		stereo->copyImagesToDevice(t265.fisheye1, t265.fisheye2);
