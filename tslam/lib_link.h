@@ -31,6 +31,7 @@
 #pragma comment(lib, LIB_PATH "opencv_flann" CV_VER_NUM LIB_EXT)
 #pragma comment(lib, LIB_PATH "opencv_cudafeatures2d" CV_VER_NUM LIB_EXT)
 #pragma comment(lib, LIB_PATH "opencv_cudaimgproc" CV_VER_NUM LIB_EXT)
+#pragma comment(lib, LIB_PATH "opencv_video" CV_VER_NUM LIB_EXT)
 
 //#pragma comment(lib, LIB_PATH "IlmImf.lib")
 //#pragma comment(lib, LIB_PATH "ippicvmt.lib")

@@ -2,8 +2,15 @@
 
 int Tslam::initialize(const char* serialNumber) {
 	viewer = new Viewer();
+
 	stereo = new Stereo();
-	stereo->initializeOpticalFlow(848, 800, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 1, 100);
+	stereo->initializeFisheyeStereo(848, 800, 1, CV_8U, 12, 1.5f, 50.0f, 0.33f, 0.125f, 5, 100);
+	cv::Mat translationVector = cv::readOpticalFlow("translationVector.flo");
+	cv::Mat calibrationVector = cv::readOpticalFlow("calibrationVector.flo");
+	stereo->loadVectorFields(translationVector, calibrationVector);
+	//stereo->initializeOpticalFlow(848, 800, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 3, 200);
+	stereo->baseline = 0.0642f;
+	stereo->focal = 285.8557f;
 	stereo->visualizeResults = true;
 	stereo->flowScale = 50.0f;
 
@@ -14,6 +21,10 @@ int Tslam::initialize(const char* serialNumber) {
 		for (auto&& devfound : dev) {
 			const char * serialNo = devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 			std::cout << "Found device: " << serialNo << std::endl;
+			std::vector<rs2::sensor> sensors = devfound.query_sensors();
+			sensors[0].set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0);
+			sensors[0].set_option(RS2_OPTION_EXPOSURE, 16000);
+			sensors[0].set_option(RS2_OPTION_GAIN, 3);
 
 			// Create pipeline for device0
 			if (isThisDevice(serialNo, serialNumber)) {
@@ -26,9 +37,11 @@ int Tslam::initialize(const char* serialNumber) {
 				t265.cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 62);
 				t265.cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200);
 				
-				t265.pipe->start(t265.cfg);
-				t265.isFound = true;
+				auto prof = t265.pipe->start(t265.cfg);
+				// Disable auto-exposure
+				
 
+				t265.isFound = true;
 				std::cout << "Pipe created from: " << serialNo << std::endl;
 			}
 		}
@@ -69,6 +82,7 @@ int Tslam::run() {
 	t2.join();
 	t3.join();
 
+	t265.pipe->stop();
 	return 0;
 }
 
@@ -106,21 +120,21 @@ int Tslam::fetchFrames() {
 		////double intrinsicNew[9] = { focal, 0, 320.729, 0, focal,  181.862, 0, 0, 1 };
 		//double intrinsicNew[9] = { focal, 0, 320.729, 0, focal,  320.729, 0, 0, 1 };
 		////double distortion[4] = { -0.00659769,0.0473251, -0.0458264, 0.00897725};
-		//double distortion[4] = { -0.00659769, 0.0473251, -0.0458264, 0.00897725 };
+		//double distortion[5] = { -0.00659769, 0.0473251, -0.0458264, 0.00897725 };
 		//cv::Mat intMat = cv::Mat(3, 3, CV_64F, intrinsic).clone();
 		//cv::Mat intNewMat = cv::Mat(3, 3, CV_64F, intrinsicNew).clone();
 		//cv::Mat distCoeffs = cv::Mat(1, 4, CV_64F, distortion).clone();
 		//cv::fisheye::undistortImage(t265.fisheye1, undistorted, intMat, distCoeffs, intNewMat, cv::Size(640,360));
+		////cv::undistort(t265.fisheye1, undistorted, intMat, distCoeffs, intNewMat);
 		//cv::imshow("fisheyeundist", undistorted);
-		//cv::imwrite("fisheyeundist.png", undistorted);
-		//cv::imwrite("fisheye.png", t265.fisheye1);
+		////cv::imwrite("fisheyeundist.png", undistorted);
+		////cv::imwrite("fisheye.png", t265.fisheye1);
 
-		// Test Optical Flow
-		stereo->copyImagesToDevice(t265.fisheye1, t265.fisheye2);
-		stereo->solveOpticalFlow();
+		// Test Optical Flo
+		/*stereo->solveOpticalFlow();
 		cv::Mat uvrgb = cv::Mat(t265.height, t265.width, CV_32FC3);
 		stereo->copyOpticalFlowVisToHost(uvrgb);
-		cv::imshow("flow", uvrgb);
+		cv::imshow("disparity", uvrgb);*/
 	}
 	return 0;
 }
@@ -154,11 +168,25 @@ int Tslam::cameraPoseSolver() {
 		// Detect Feature points
 		detectAndComputeOrb(t265.fisheye1, t265.d_fe1, t265.keypointsFe1, t265.d_descriptorsFe1);
 		detectAndComputeOrb(t265.fisheye2, t265.d_fe2, t265.keypointsFe2, t265.d_descriptorsFe2);
-		/*cv::imwrite("fs1.png", t265.fisheye1);
-		cv::imwrite("fs2.png", t265.fisheye2);*/
+		/*cv::Mat equi1, equi2;
+		cv::equalizeHist(t265.fisheye1, equi1);
+		cv::equalizeHist(t265.fisheye2, equi2);
+		cv::imwrite("fs1.png", equi1);
+		cv::imwrite("fs2.png", equi2);*/
 		//visualizeKeypoints(t265, "kp");
 
 		// Solve stereo depth
+		stereo->copyImagesToDevice(t265.fisheye1, t265.fisheye2);
+		stereo->solveStereo();
+		cv::Mat depth = cv::Mat(t265.height, t265.width, CV_32F);
+		stereo->copyStereoToHost(depth);
+		showDepthJet("color", depth, 5.0f, false);
+		std::cout << depth.at<float>(cv::Point(424, 400)) << std::endl;
+		/*cv::Mat uvrgb = cv::Mat(t265.height, t265.width, CV_32FC3);
+		stereo->copyOpticalFlowVisToHost(uvrgb);
+		cv::imshow("flow", uvrgb);*/
+		
+
 		stereoMatching(t265);
 		visualizeMatchedStereoPoints(t265, "stereo");
 
@@ -676,4 +704,37 @@ std::string Tslam::parseDecimal(double f, int precision) {
 		string << std::fixed << "+" << f;
 	}
 	return string.str();
+}
+
+
+/// Tests
+void Tslam::showDepthJet(std::string windowName, cv::Mat image, float maxDepth, bool shouldWait = true) {
+	cv::Mat u_norm, u_gray, u_color;
+	u_norm = image * 256.0f / maxDepth;
+	u_norm.convertTo(u_gray, CV_8UC1);
+	cv::applyColorMap(u_gray, u_color, cv::COLORMAP_JET);
+
+	cv::imshow(windowName, u_color);
+	if (shouldWait) cv::waitKey();
+}
+
+void Tslam::testStereo(std::string im1fn, std::string im2fn) {
+	cv::Mat im1 = cv::imread(im1fn);
+	cv::Mat im2 = cv::imread(im2fn);
+
+	stereo = new Stereo();
+	stereo->initializeFisheyeStereo(848, 800, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 1, 1000);
+	cv::Mat translationVector = cv::readOpticalFlow("translationVector.flo");
+	cv::Mat calibrationVector = cv::readOpticalFlow("calibrationVector.flo");
+	stereo->loadVectorFields(translationVector, calibrationVector);
+
+	stereo->copyImagesToDevice(im1, im2);
+	stereo->solveStereo();
+	cv::Mat disparity = cv::Mat(800, 848, CV_32F);
+	stereo->copyStereoToHost(disparity);
+	cv::imshow("disparity", disparity / 50.0f);
+	cv::imshow("im1", im1);
+	cv::imshow("im2", im2);
+	showDepthJet("color", disparity, 1, false);
+	cv::waitKey();
 }

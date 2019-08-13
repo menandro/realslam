@@ -6,6 +6,7 @@ int main() {
 	Tslam *tslam = new Tslam();
 	tslam->initialize("852212110449");
 	tslam->run();
+	//tslam->testStereo("fs1.png", "fs2.png");
 
 	/*Rslam* rslam = new Rslam();
 	rslam->testT265();*/

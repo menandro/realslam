@@ -73,7 +73,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>C:\ProgramData\NVIDIA Corporation\CUDA Samples\v10.0\common\inc;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.0\include;D:\dev\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <IncludePath>C:\ProgramData\NVIDIA Corporation\CUDA Samples\v10.1\common\inc;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\include;D:\dev\include;$(VC_IncludePath);$(WindowsSDK_IncludePath)</IncludePath>
     <LibraryPath>D:\dev\lib64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">

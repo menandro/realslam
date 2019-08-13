@@ -9,20 +9,62 @@ class Stereo {
 public:
 	Stereo();
 	Stereo(int BlockWidth, int BlockHeight, int StrideAlignemnt);
-	~Stereo();
+	~Stereo() {};
 
 	int BlockWidth;
 	int BlockHeight;
 	int StrideAlignment;
 
+	// Vector Fields
+	cv::Mat translationVectorX;
+	cv::Mat translationVectorY;
+	cv::Mat calibrationVectorX;
+	cv::Mat calibrationVectorY;
+	float *d_tvx;
+	float *d_tvy;
+	float *d_tvx2; // vector where u,v points
+	float *d_tvy2;
+	float *d_cvx;
+	float *d_cvy;
+	float *d_i1calibrated;
+
+	float *d_Iw;
+	float *d_w; // Final stereo disparity
+	float *d_ws;
+	float *d_dw;
+	float *d_dws;
+	float *d_dwmed;
+	float *d_dwmeds;
+	float *d_pw1;
+	float *d_pw2;
+	float *d_pw1s;
+	float *d_pw2s;
+	std::vector<float*> pTvx;
+	std::vector<float*> pTvy;
+	cv::Mat disparity;
+	cv::Mat depth;
+	float *d_depth;
+
+	float baseline;
+	float focal;
+
+	// Stereo
+	int loadVectorFields(cv::Mat translationVector, cv::Mat calibrationVector);
+	int solveStereo();
+	int copyStereoToHost(cv::Mat &w);
+
 	// Optical Flow
+	int initializeFisheyeStereo(int width, int height, int channels, int inputType, int nLevels, float scale, float lambda,
+		float theta, float tau, int nWarpIters, int nSolverIters);
 	int initializeOpticalFlow(int width, int height, int channels, int inputType, int nLevels, float scale, float lambda,
 		float theta, float tau, int nWarpIters, int nSolverIters);
-	int copyImagesToDevice(cv::Mat i0, cv::Mat i1);
 	int copyOpticalFlowToHost(cv::Mat &u, cv::Mat &v);
 	int solveOpticalFlow();
 	int copyOpticalFlowVisToHost(cv::Mat &uvrgb);
 
+	// Common
+	int copyImagesToDevice(cv::Mat i0, cv::Mat i1);
+	
 	int width;
 	int height;
 	int stride;
@@ -105,6 +147,29 @@ public:
 	// colored uv, for display only
 	float3 *d_uvrgb;
 	float3 *d_colorwheel;
+
+	// Stereo Kernels
+	void FindWarpingVector(const float *u, const float *v, const float *tvx, const float *tvy, int w, int h, int s,
+		float *tvx2, float *tvy2);
+	void ComputeOpticalFlowVector(const float *dw, const float *tvx2, const float *tvy2,
+		int w, int h, int s,
+		float *du, float *dv);
+	void ComputeDerivativesFisheye(float *I0, float *I1, float *vectorX, float *vectorY,
+		int w, int h, int s, float *Iw, float *Iz);
+	void MedianFilterDisparity(float *inputu,
+		int w, int h, int s, float *outputu, int kernelsize);
+	void SolveDataL1Stereo(const float *dwhat0,
+		const float *pw1, const float *pw2,
+		const float *Iw, const float *Iz,
+		int w, int h, int s,
+		float lambda, float theta,
+		float *dwhat1);
+	void SolveSmoothDualTVGlobalStereo(float *duhat,
+		float *pw1, float *pw2,
+		int w, int h, int s,
+		float tau, float theta,
+		float *pw1s, float*pw2s);
+	void ConvertDisparityToDepth(float *disparity, float baseline, float focal, int w, int h, int s, float *depth);
 
 	// Optical Flow Kernels
 	void Cv8uToGray(uchar * d_iCv8u, float *d_iGray, int w, int h, int s);

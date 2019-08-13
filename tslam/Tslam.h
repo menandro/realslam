@@ -15,6 +15,7 @@ Device: T265
 #include <glm/gtx/quaternion.hpp>
 #include <opencv2/xfeatures2d/cuda.hpp>
 #include <opencv2/cudafeatures2d.hpp>
+#include <opencv2/optflow.hpp>
 #include <stereo/stereo.h>
 
 class Tslam {
@@ -203,4 +204,7 @@ public:
 	void overlayMatrixRot(const char* windowName, cv::Mat& im, Vector3 euler, Quaternion q);
 	std::string parseDecimal(double f);
 	std::string parseDecimal(double f, int precision);
+
+	void testStereo(std::string im1, std::string im2);
+	void showDepthJet(std::string windowName, cv::Mat image, float maxDepth, bool shouldWait);
 };

@@ -56,5 +56,8 @@
     <CudaCompile Include="flowToHSV.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
+    <CudaCompile Include="conversion.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
   </ItemGroup>
 </Project>
