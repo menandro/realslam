@@ -20,7 +20,9 @@ void AddKernel(const float *op1, const float *op2, int count, float *sum)
 
 void Stereo::Add(const float *op1, const float *op2, int count, float *sum)
 {
-	dim3 threads(256);
+	dim3 threads(BlockWidth, BlockHeight);
+	//dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
+	//dim3 threads(256);
 	dim3 blocks(iDivUp(count, threads.x));
 	AddKernel <<< blocks, threads >>>(op1, op2, count, sum);
 }

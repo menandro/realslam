@@ -180,36 +180,36 @@ void SolveDataL1StereoKernel(const float *dwhat0,
 			}*/
 
 			//problem 1b
-			float divpu, divpv;
+			float divpw;
 			int left = (ix - 1) + iy * stride;
-			int right = (ix + 1) + iy * stride;
+//			int right = (ix + 1) + iy * stride;
 			int down = ix + (iy - 1) * stride;
-			int up = ix + (iy + 1) * stride;
+//			int up = ix + (iy + 1) * stride;
 
 			if ((ix - 1) < 0) {
 				if ((iy - 1) < 0) {
 					//divpu = pu1[right] - pu1[pos] + pu2[up] - pu2[pos];
 					//divpv = pv1[right] - pv1[pos] + pv2[up] - pv2[pos];
-					divpu = pw1[pos] + pw2[pos];
+					divpw = pw1[pos] + pw2[pos];
 				}
 				else {
 					//divpu = pu1[right] - pu1[pos] + pu2[pos] - pu2[down];
 					//divpv = pv1[right] - pv1[pos] + pv2[pos] - pv2[down];
-					divpu = pw1[pos] + pw2[pos] - pw2[down];
+					divpw = pw1[pos] + pw2[pos] - pw2[down];
 				}
 			}
 			else {
 				if ((iy - 1) < 0) {
 					//divpu = pu1[pos] - pu1[left] + pu2[up] - pu2[pos];
 					//divpv = pv1[pos] - pv1[left] + pv2[up] - pv2[pos];
-					divpu = pw1[pos] - pw1[left] + pw2[pos];
+					divpw = pw1[pos] - pw1[left] + pw2[pos];
 				}
 				else {
-					divpu = pw1[pos] - pw1[left] + pw2[pos] - pw2[down];
+					divpw = pw1[pos] - pw1[left] + pw2[pos] - pw2[down];
 				}
 			}
 
-			float dwval = dw + theta * divpu;
+			float dwval = dw + theta * divpw;
 			dwhat1[pos] = dwval;
 			/*if (dwval < 0) {
 				dwhat1[pos] = 0.0f;

@@ -3,16 +3,50 @@
 int Tslam::initialize(const char* serialNumber) {
 	viewer = new Viewer();
 
+	// Fisheye Stereo
 	stereo = new Stereo();
-	stereo->initializeFisheyeStereo(848, 800, 1, CV_8U, 12, 1.5f, 50.0f, 0.33f, 0.125f, 5, 100);
-	cv::Mat translationVector = cv::readOpticalFlow("translationVector.flo");
-	cv::Mat calibrationVector = cv::readOpticalFlow("calibrationVector.flo");
+	stereoScaling = 2.0f;
+	stereoWidth = (int)(t265.width / stereoScaling);
+	stereoHeight = (int)(t265.height / stereoScaling);
+	stereo->baseline = 0.0642f;
+	stereo->focal = 285.8557f / stereoScaling;
+	cv::Mat translationVector, calibrationVector;
+	if (stereoScaling == 2.0f) {
+		translationVector = cv::readOpticalFlow("translationVectorHalf.flo");
+		calibrationVector = cv::readOpticalFlow("calibrationVectorHalf.flo");
+	}
+	else {
+		translationVector = cv::readOpticalFlow("translationVector.flo");
+		calibrationVector = cv::readOpticalFlow("calibrationVector.flo");
+	}
+	
+	//stereo->initializeFisheyeStereo(stereoWidth, stereoHeight, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 1, 1000);
+	stereo->initializeFisheyeStereo(stereoWidth, stereoHeight, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 1, 100);
+	
 	stereo->loadVectorFields(translationVector, calibrationVector);
 	//stereo->initializeOpticalFlow(848, 800, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 3, 200);
-	stereo->baseline = 0.0642f;
-	stereo->focal = 285.8557f;
 	stereo->visualizeResults = true;
 	stereo->flowScale = 50.0f;
+	stereo->planeSweepMaxDisparity = 120;
+	stereo->planeSweepWindow = 5;
+	stereo->planeSweepMaxError = 0.05f;
+	stereo->planeSweepStride = 1;
+	stereo->isReverse = true;
+
+	// Upsampling
+	// Depth upsampling
+	upsampling = new lup::Upsampling(32, 12, 32);
+	int maxIter = 100;
+	float beta = 9.0f;
+	float gamma = 0.85f;
+	float alpha0 = 17.0f;
+	float alpha1 = 1.2f;
+	float timeStepLambda = 1.0f;
+	float lambdaTgvl2 = 0.1f;
+	float maxUpsamplingDepth = 5.0f;
+	this->maxUpsamplingDepth = maxUpsamplingDepth;
+	upsampling->initialize(stereoWidth, stereoHeight, maxIter, beta, gamma, 
+		alpha0, alpha1, timeStepLambda, lambdaTgvl2, maxUpsamplingDepth);
 
 	try {
 		ctx = new rs2::context();
@@ -153,6 +187,9 @@ int Tslam::cameraPoseSolver() {
 	//cv::imshow("fisheye mask", t265.fisheyeMask);
 	t265.d_fisheyeMask.upload(t265.fisheyeMask);
 
+	cv::Mat depthVisMask = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_8UC1);
+	circle(depthVisMask, cv::Point(stereoWidth/2, stereoHeight/2), (int)((float)stereoWidth/2.2f), cv::Scalar(256.0f), -1);
+
 	while (true) {
 		char pressed = cv::waitKey(10);
 		if (pressed == 27) break;
@@ -166,8 +203,8 @@ int Tslam::cameraPoseSolver() {
 		//createDepthThresholdMask(device0, 2.0f);
 
 		// Detect Feature points
-		detectAndComputeOrb(t265.fisheye1, t265.d_fe1, t265.keypointsFe1, t265.d_descriptorsFe1);
-		detectAndComputeOrb(t265.fisheye2, t265.d_fe2, t265.keypointsFe2, t265.d_descriptorsFe2);
+		/*detectAndComputeOrb(t265.fisheye1, t265.d_fe1, t265.keypointsFe1, t265.d_descriptorsFe1);
+		detectAndComputeOrb(t265.fisheye2, t265.d_fe2, t265.keypointsFe2, t265.d_descriptorsFe2);*/
 		/*cv::Mat equi1, equi2;
 		cv::equalizeHist(t265.fisheye1, equi1);
 		cv::equalizeHist(t265.fisheye2, equi2);
@@ -176,19 +213,54 @@ int Tslam::cameraPoseSolver() {
 		//visualizeKeypoints(t265, "kp");
 
 		// Solve stereo depth
-		stereo->copyImagesToDevice(t265.fisheye1, t265.fisheye2);
-		stereo->solveStereo();
-		cv::Mat depth = cv::Mat(t265.height, t265.width, CV_32F);
+		cv::Mat halfFisheye1, halfFisheye2;
+		cv::Mat equi1, equi2;
+		cv::equalizeHist(t265.fisheye1, equi1);
+		cv::equalizeHist(t265.fisheye2, equi2);
+		cv::imshow("equi", equi1);
+		cv::resize(equi1, halfFisheye1, cv::Size(stereoWidth, stereoHeight));
+		cv::resize(equi2, halfFisheye2, cv::Size(stereoWidth, stereoHeight));
+		stereo->copyImagesToDevice(halfFisheye1, halfFisheye2);
+		stereo->solveStereoForward();
+		//stereo->solveStereoBackward();
+		//stereo->occlusionCheck(3.0f);
+
+		cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+		cv::Mat depthVis;
 		stereo->copyStereoToHost(depth);
-		showDepthJet("color", depth, 5.0f, false);
-		std::cout << depth.at<float>(cv::Point(424, 400)) << std::endl;
+		depth.copyTo(depthVis, depthVisMask);
+		showDepthJet("color", depthVis, 5.0f, false);
+		//std::cout << depth.at<float>(200, 200) << std::endl;
+		//std::cout << depthVis.cols << " " << depth.cols << std::endl;
+
+		/*cv::Mat planeSweepDepth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+		stereo->copyPlaneSweepToHost(planeSweepDepth);
+		cv::Mat planeSweepDepthVis;
+		planeSweepDepth.copyTo(planeSweepDepthVis, depthVisMask);
+		showDepthJet("psdepth", planeSweepDepthVis, 5.0f, false);*/
+
+		cv::Mat depthUpsample = cv::Mat(stereoHeight, upsampling->iAlignUp(stereoWidth), CV_32F);
+		cv::Mat depthPad, imagePad;
+		cv::copyMakeBorder(depthVis, depthPad, 0, 0, 0, upsampling->iAlignUp(stereoWidth) - stereoWidth, cv::BORDER_CONSTANT, 0);
+		cv::copyMakeBorder(halfFisheye1, imagePad, 0, 0, 0, upsampling->iAlignUp(stereoWidth) - stereoWidth, cv::BORDER_CONSTANT, 0);
+		//std::cout << depth.size() << " " << depthVis.size() << std::endl;
+		upsampling->copyImagesToDevice(imagePad, depthPad);
+		//upsampling->propagateColorOnly(10);
+		upsampling->optimizeOnly();
+		//upsampling->solve();
+		upsampling->copyImagesToHost(depthUpsample);
+		depthUpsample = depthUpsample * this->maxUpsamplingDepth;
+		//std::cout << equi1.at<float>(200, 200) << std::endl;
+		showDepthJet("upsample", depthUpsample, 5.0f, false);
+
+		//std::cout << depth.at<float>(cv::Point(424, 400)) << std::endl;
 		/*cv::Mat uvrgb = cv::Mat(t265.height, t265.width, CV_32FC3);
 		stereo->copyOpticalFlowVisToHost(uvrgb);
 		cv::imshow("flow", uvrgb);*/
 		
 
-		stereoMatching(t265);
-		visualizeMatchedStereoPoints(t265, "stereo");
+		/*stereoMatching(t265);
+		visualizeMatchedStereoPoints(t265, "stereo");*/
 
 		// Match with keyframe
 		//matchAndPose(t265);
@@ -729,7 +801,7 @@ void Tslam::testStereo(std::string im1fn, std::string im2fn) {
 	stereo->loadVectorFields(translationVector, calibrationVector);
 
 	stereo->copyImagesToDevice(im1, im2);
-	stereo->solveStereo();
+	stereo->solveStereoForward();
 	cv::Mat disparity = cv::Mat(800, 848, CV_32F);
 	stereo->copyStereoToHost(disparity);
 	cv::imshow("disparity", disparity / 50.0f);

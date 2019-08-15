@@ -113,6 +113,7 @@ namespace lup {
 
 		int propagateColorOnly(int radius);
 		int solve();
+		int optimizeOnly();
 		int convertDepthTo3D(float focal, float cx, float cy); // convert depth to 3D points
 
 		// UTILITIES
@@ -162,6 +163,7 @@ namespace lup {
 		int showImage(std::string windowName, float* input, float minVal, float maxVal, bool shouldWait);
 		int showImage(std::string windowName, uchar3* input, bool shouldWait);
 		int showDepthJet(std::string windowName, float* input, bool shouldWait);
+		void showDepthJet(std::string windowName, float* input, float maxDepth, bool shouldWait);
 		int saveDepthJet(std::string filename, float* input, float maxDepth);
 	};
 }

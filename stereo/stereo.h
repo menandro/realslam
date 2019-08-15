@@ -20,8 +20,10 @@ public:
 	cv::Mat translationVectorY;
 	cv::Mat calibrationVectorX;
 	cv::Mat calibrationVectorY;
-	float *d_tvx;
-	float *d_tvy;
+	float *d_tvxForward;
+	float *d_tvyForward;
+	float *d_tvxBackward;
+	float *d_tvyBackward;
 	float *d_tvx2; // vector where u,v points
 	float *d_tvy2;
 	float *d_cvx;
@@ -39,19 +41,54 @@ public:
 	float *d_pw2;
 	float *d_pw1s;
 	float *d_pw2s;
-	std::vector<float*> pTvx;
-	std::vector<float*> pTvy;
+	std::vector<float*> pTvxForward;
+	std::vector<float*> pTvyForward;
+	std::vector<float*> pTvxBackward;
+	std::vector<float*> pTvyBackward;
 	cv::Mat disparity;
 	cv::Mat depth;
 	float *d_depth;
+
+	float *d_wForward;
+	float *d_wBackward;
+	float *d_wFinal;
+	float *d_depthFinal;
+	float *d_occlusion;
+
+	bool isReverse = false;
+	bool isOcclusionChecked = false;
+	bool isPlaneSweepOcclusionChecked = false;
+
+	// Plane sweep
+	float * ps_i1warp;
+	float * ps_i1warps;
+	float * ps_error;
+	float * ps_depth;
+	float * ps_disparity;
+	int planeSweepMaxDisparity;
+	int planeSweepWindow;
+	float planeSweepMaxError;
+	int planeSweepStride;
+	cv::Mat planeSweepDepth;
+
+	float * ps_depthFinal;
+	float * ps_disparityForward;
+	float * ps_disparityBackward;
+	float * ps_disparityFinal;
 
 	float baseline;
 	float focal;
 
 	// Stereo
 	int loadVectorFields(cv::Mat translationVector, cv::Mat calibrationVector);
-	int solveStereo();
+	int solveStereoForward();
+	int solveStereoBackward(); // Can't call without calling forward
+	int planeSweepForward();
+	int planeSweepBackward();
 	int copyStereoToHost(cv::Mat &w);
+	int copyPlaneSweepToHost(cv::Mat &ps);
+	int occlusionCheck(float threshold);
+	int planeSweepOcclusionCheck();
 
 	// Optical Flow
 	int initializeFisheyeStereo(int width, int height, int channels, int inputType, int nLevels, float scale, float lambda,
@@ -135,6 +172,8 @@ public:
 	//outputs
 	float *d_u; //optical flow x
 	float *d_v; //optical flow y
+	float *d_uForward;
+	float *d_vForward;
 
 	//inputs
 	// CV_8UC3
@@ -149,6 +188,16 @@ public:
 	float3 *d_colorwheel;
 
 	// Stereo Kernels
+	void OcclusionCheck(float* wForward, float* wBackward, float threshold, 
+		float *u, float *v, int w, int h, int s, float* wFinal);
+	void ScalarMultiply(float *src, float scalar, int w, int h, int s);
+	void ScalarMultiply(float *src, float scalar, int w, int h, int s, float *dst);
+	void LimitRange(float *src, float upperLimit, int w, int h, int s, float *dst);
+	void SetValue(float *image, float value, int w, int h, int s);
+	void Clone(const float *src, int w, int h, int s, float *dst);
+	void PlaneSweepCorrelation(float *i0, float *i1, float* disparity, int sweepDistance, int windowSize,
+		int w, int h, int s,
+		float *error);
 	void FindWarpingVector(const float *u, const float *v, const float *tvx, const float *tvy, int w, int h, int s,
 		float *tvx2, float *tvy2);
 	void ComputeOpticalFlowVector(const float *dw, const float *tvx2, const float *tvy2,

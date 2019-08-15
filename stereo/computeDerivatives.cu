@@ -114,11 +114,27 @@ void ComputeDerivativesFisheyeKernel(float * vectorX, float *vectorY, int width,
 
 	float t0;
 	// curve w derivative
-	t0 = tex2D(texI0, x - 2.0f * dx, y);
+	t0 = tex2D(texI0, x - 2.0f * dx, y - 2.0f * dy);
+	t0 -= tex2D(texI0, x - 1.0f * dx, y - 1.0f * dy) * 8.0f;
+	t0 += tex2D(texI0, x + 1.0f * dx, y + 1.0f * dy) * 8.0f;
+	t0 -= tex2D(texI0, x + 2.0f * dx, y + 2.0f * dy);
+	t0 /= 12.0f;
+
+	float t1;
+	t1 = tex2D(texI1, x - 2.0f * dx, y - 2.0f * dy);
+	t1 -= tex2D(texI1, x - 1.0f * dx, y - 1.0f * dy) * 8.0f;
+	t1 += tex2D(texI1, x + 1.0f * dx, y + 1.0f * dy) * 8.0f;
+	t1 -= tex2D(texI1, x + 2.0f * dx, y + 2.0f * dy);
+	t1 /= 12.0f;
+
+	//dx = 1.0f / (float)width;
+	/*t0 = tex2D(texI0, x - 2.0f * dx, y);
 	t0 -= tex2D(texI0, x - 1.0f * dx, y) * 8.0f;
 	t0 += tex2D(texI0, x + 1.0f * dx, y) * 8.0f;
 	t0 -= tex2D(texI0, x + 2.0f * dx, y);
-	t0 /= 12.0f;
+	t0 /= 12.0f;*/
+
+	//t0 = (tex2D(texI0, x + dx, y + dy) - tex2D(texI0, x, y));
 
 	/*t1 = tex2D(texI1, x - 2.0f * dx, y);
 	t1 -= tex2D(texI1, x - 1.0f * dx, y) * 8.0f;
@@ -126,7 +142,7 @@ void ComputeDerivativesFisheyeKernel(float * vectorX, float *vectorY, int width,
 	t1 -= tex2D(texI1, x + 2.0f * dx, y);
 	t1 /= 12.0f;*/
 
-	Iw[pos] = (t0);// +t1) * 0.5f;
+	Iw[pos] = (t0 +t1) * 0.5f;
 
 	// t derivative
 	Iz[pos] = tex2D(texI1, x, y) - tex2D(texI0, x, y);

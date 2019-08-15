@@ -137,8 +137,10 @@ int Stereo::initializeFisheyeStereo(int width, int height, int channels, int inp
 	pH = std::vector<int>(nLevels);
 	pS = std::vector<int>(nLevels);
 	pDataSize = std::vector<int>(nLevels);
-	pTvx = std::vector<float*>(nLevels);
-	pTvy = std::vector<float*>(nLevels);
+	pTvxForward = std::vector<float*>(nLevels);
+	pTvyForward = std::vector<float*>(nLevels);
+	pTvxBackward = std::vector<float*>(nLevels);
+	pTvyBackward = std::vector<float*>(nLevels);
 
 	int newHeight = height;
 	int newWidth = width;
@@ -148,8 +150,10 @@ int Stereo::initializeFisheyeStereo(int width, int height, int channels, int inp
 		pDataSize[level] = newStride * newHeight * sizeof(float);
 		checkCudaErrors(cudaMalloc(&pI0[level], pDataSize[level]));
 		checkCudaErrors(cudaMalloc(&pI1[level], pDataSize[level]));
-		checkCudaErrors(cudaMalloc(&pTvx[level], pDataSize[level]));
-		checkCudaErrors(cudaMalloc(&pTvy[level], pDataSize[level]));
+		checkCudaErrors(cudaMalloc(&pTvxForward[level], pDataSize[level]));
+		checkCudaErrors(cudaMalloc(&pTvyForward[level], pDataSize[level]));
+		checkCudaErrors(cudaMalloc(&pTvxBackward[level], pDataSize[level]));
+		checkCudaErrors(cudaMalloc(&pTvyBackward[level], pDataSize[level]));
 
 		pW[level] = newWidth;
 		pH[level] = newHeight;
@@ -167,8 +171,10 @@ int Stereo::initializeFisheyeStereo(int width, int height, int channels, int inp
 	dataSize32fc3 = dataSize * 3;
 	checkCudaErrors(cudaMalloc(&d_i1warp, dataSize));
 
-	checkCudaErrors(cudaMalloc(&d_tvx, dataSize));
-	checkCudaErrors(cudaMalloc(&d_tvy, dataSize));
+	checkCudaErrors(cudaMalloc(&d_tvxForward, dataSize));
+	checkCudaErrors(cudaMalloc(&d_tvyForward, dataSize));
+	checkCudaErrors(cudaMalloc(&d_tvxBackward, dataSize));
+	checkCudaErrors(cudaMalloc(&d_tvyBackward, dataSize));
 	checkCudaErrors(cudaMalloc(&d_tvx2, dataSize));
 	checkCudaErrors(cudaMalloc(&d_tvy2, dataSize));
 	checkCudaErrors(cudaMalloc(&d_cvx, dataSize));
@@ -179,8 +185,13 @@ int Stereo::initializeFisheyeStereo(int width, int height, int channels, int inp
 	checkCudaErrors(cudaMalloc(&d_Iz, dataSize));
 
 	checkCudaErrors(cudaMalloc(&d_w, dataSize));
+	checkCudaErrors(cudaMalloc(&d_wForward, dataSize));
+	checkCudaErrors(cudaMalloc(&d_wBackward, dataSize));
+	checkCudaErrors(cudaMalloc(&d_wFinal, dataSize));
 	checkCudaErrors(cudaMalloc(&d_u, dataSize));
 	checkCudaErrors(cudaMalloc(&d_v, dataSize));
+	checkCudaErrors(cudaMalloc(&d_uForward, dataSize));
+	checkCudaErrors(cudaMalloc(&d_vForward, dataSize));
 	checkCudaErrors(cudaMalloc(&d_us, dataSize));
 	checkCudaErrors(cudaMalloc(&d_vs, dataSize));
 	checkCudaErrors(cudaMalloc(&d_ws, dataSize));
@@ -190,6 +201,8 @@ int Stereo::initializeFisheyeStereo(int width, int height, int channels, int inp
 	checkCudaErrors(cudaMalloc(&d_dw, dataSize));
 	checkCudaErrors(cudaMalloc(&d_dws, dataSize));
 	checkCudaErrors(cudaMalloc(&d_depth, dataSize));
+	checkCudaErrors(cudaMalloc(&d_depthFinal, dataSize));
+	checkCudaErrors(cudaMalloc(&d_occlusion, dataSize));
 
 	checkCudaErrors(cudaMalloc(&d_dwmed, dataSize));
 	checkCudaErrors(cudaMalloc(&d_dwmeds, dataSize));
@@ -207,11 +220,22 @@ int Stereo::initializeFisheyeStereo(int width, int height, int channels, int inp
 		checkCudaErrors(cudaMalloc(&d_i18u, dataSize8u));
 	}
 
-	// colored uv, for display only
+	// Plane sweep
+	checkCudaErrors(cudaMalloc(&ps_i1warp, dataSize));
+	checkCudaErrors(cudaMalloc(&ps_i1warps, dataSize));
+	checkCudaErrors(cudaMalloc(&ps_error, dataSize));
+	checkCudaErrors(cudaMalloc(&ps_depth, dataSize));
+	checkCudaErrors(cudaMalloc(&ps_disparity, dataSize));
+	checkCudaErrors(cudaMalloc(&ps_disparityForward, dataSize));
+	checkCudaErrors(cudaMalloc(&ps_disparityBackward, dataSize));
+	checkCudaErrors(cudaMalloc(&ps_disparityFinal, dataSize));
+
+	// Colored uv, for display only
 	checkCudaErrors(cudaMalloc(&d_uvrgb, dataSize * 3));
 	uvrgb = cv::Mat(height, stride, CV_32FC3);
 	disparity = cv::Mat(height, stride, CV_32F);
 	depth = cv::Mat(height, stride, CV_32F);
+	planeSweepDepth = cv::Mat(height, stride, CV_32F);
 	return 0;
 }
 
@@ -232,22 +256,27 @@ int Stereo::loadVectorFields(cv::Mat translationVector, cv::Mat calibrationVecto
 	cv::split(translationVectorPad, tuv);
 	translationVectorX = tuv[0];
 	translationVectorY = tuv[1];
-	checkCudaErrors(cudaMemcpy(d_tvx, (float *)translationVectorX.ptr(), dataSize32f, cudaMemcpyHostToDevice));
-	checkCudaErrors(cudaMemcpy(d_tvy, (float *)translationVectorY.ptr(), dataSize32f, cudaMemcpyHostToDevice));
+	checkCudaErrors(cudaMemcpy(d_tvxForward, (float *)translationVectorX.ptr(), dataSize32f, cudaMemcpyHostToDevice));
+	checkCudaErrors(cudaMemcpy(d_tvyForward, (float *)translationVectorY.ptr(), dataSize32f, cudaMemcpyHostToDevice));
 
-	pTvx[0] = d_tvx;
-	pTvy[0] = d_tvy;
+	pTvxForward[0] = d_tvxForward;
+	pTvyForward[0] = d_tvyForward;
+	ScalarMultiply(d_tvxForward, -1.0f, width, height, stride, d_tvxBackward);
+	ScalarMultiply(d_tvyForward, -1.0f, width, height, stride, d_tvyBackward);
+	pTvxBackward[0] = d_tvxBackward;
+	pTvyBackward[0] = d_tvyBackward;
 	for (int level = 1; level < nLevels; level++) {
 		//std::cout << pW[level] << " " << pH[level] << " " << pS[level] << std::endl;
-		Downscale(pTvx[level - 1],
-			pW[level - 1], pH[level - 1], pS[level - 1],
-			pW[level], pH[level], pS[level],
-			pTvx[level]);
+		Downscale(pTvxForward[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
+			pW[level], pH[level], pS[level], pTvxForward[level]);
+		Downscale(pTvyForward[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
+			pW[level], pH[level], pS[level], pTvyForward[level]);
 
-		Downscale(pTvy[level - 1],
-			pW[level - 1], pH[level - 1], pS[level - 1],
-			pW[level], pH[level], pS[level],
-			pTvy[level]);
+		Downscale(pTvxBackward[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
+			pW[level], pH[level], pS[level], pTvxBackward[level]);
+		Downscale(pTvyBackward[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
+			pW[level], pH[level], pS[level], pTvyBackward[level]);
+
 	}
 
 	// Calibration Vector Field
@@ -286,15 +315,15 @@ int Stereo::copyImagesToDevice(cv::Mat i0, cv::Mat i1) {
 	return 0;
 }
 
-int Stereo::solveStereo() {
+int Stereo::solveStereoForward() {
 	// Warp i1 using vector fields
 	WarpImage(pI1[0], width, height, stride, d_cvx, d_cvy, d_i1calibrated);
 	Swap(pI1[0], d_i1calibrated);
-	/*cv::Mat calibrated = cv::Mat(height, stride, CV_32F);
-	checkCudaErrors(cudaMemcpy((float *)calibrated.ptr(), pI1[0], width * height * sizeof(float), cudaMemcpyDeviceToHost));
-	cv::imshow("calibrated", calibrated);*/
 
-	// construct pyramid
+	checkCudaErrors(cudaMemset(d_w, 0, dataSize));
+	checkCudaErrors(cudaMemset(d_u, 0, dataSize));
+	checkCudaErrors(cudaMemset(d_v, 0, dataSize));
+	// Construct pyramid
 	for (int level = 1; level < nLevels; level++) {
 		Downscale(pI0[level - 1],
 			pW[level - 1], pH[level - 1], pS[level - 1],
@@ -306,15 +335,21 @@ int Stereo::solveStereo() {
 			pW[level], pH[level], pS[level],
 			pI1[level]);
 	}
-	// solve stereo
-	checkCudaErrors(cudaMemset(d_w, 0, dataSize));
-	checkCudaErrors(cudaMemset(d_u, 0, dataSize));
-	checkCudaErrors(cudaMemset(d_v, 0, dataSize));
 
+	//planeSweepForward();
+
+	ComputeOpticalFlowVector(d_w, d_tvxForward, d_tvyForward, pW[0], pH[0], pS[0], d_u, d_v);
+
+	/*cv::Mat calibrated = cv::Mat(height, stride, CV_32F);
+	checkCudaErrors(cudaMemcpy((float *)calibrated.ptr(), ps_disparity, width * height * sizeof(float), cudaMemcpyDeviceToHost));
+	cv::imshow("calibrated", calibrated/(float)planeSweepMaxDisparity);*/
+
+	// Solve stereo
 	for (int level = nLevels - 1; level >= 0; level--) {
 		for (int warpIter = 0; warpIter < nWarpIters; warpIter++) {
 			// Compute U,V from W d_w is magnitude of vector d_tvx, d_tvy
 			// Warp using U,V
+			//std::cout << "entered" << std::endl;
 			checkCudaErrors(cudaMemset(d_du, 0, dataSize));
 			checkCudaErrors(cudaMemset(d_dv, 0, dataSize));
 			checkCudaErrors(cudaMemset(d_dw, 0, dataSize));
@@ -325,20 +360,20 @@ int Stereo::solveStereo() {
 			checkCudaErrors(cudaMemset(d_pw1, 0, dataSize));
 			checkCudaErrors(cudaMemset(d_pw2, 0, dataSize));
 
-			FindWarpingVector(d_u, d_v, pTvx[level], pTvy[level], pW[level], pH[level], pS[level], d_tvx2, d_tvy2);
+			FindWarpingVector(d_u, d_v, pTvxForward[level], pTvyForward[level], pW[level], pH[level], pS[level], d_tvx2, d_tvy2);
 			WarpImage(pI1[level], pW[level], pH[level], pS[level], d_u, d_v, d_i1warp);
 			//std::cout << pW[level] << " " << pH[level] << " " << pS[level] << std::endl;
-			ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvx[level], pTvy[level], pW[level], pH[level], pS[level], d_Iw, d_Iz);
-			if (level == 0) {
+			ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvxForward[level], pTvyForward[level], pW[level], pH[level], pS[level], d_Iw, d_Iz);
+			/*if (level == 0) {
 				cv::Mat calibrated = cv::Mat(pH[level], pS[level], CV_32F);
 				checkCudaErrors(cudaMemcpy((float *)calibrated.ptr(), d_i1warp, pS[level] * pH[level] * sizeof(float), cudaMemcpyDeviceToHost));
 				cv::imshow("gradient", calibrated);
-			}
+			}*/
 
 			// Inner iteration
 			for (int iter = 0; iter < nSolverIters; ++iter)
 			{
-				SolveDataL1Stereo(d_dwmed, 
+				SolveDataL1Stereo(d_dwmed,
 					d_pw1, d_pw2,
 					d_Iw, d_Iz,
 					pW[level], pH[level], pS[level],
@@ -346,7 +381,7 @@ int Stereo::solveStereo() {
 					d_dwmeds); //du1 = duhat output
 				Swap(d_dwmed, d_dwmeds);
 
-				SolveSmoothDualTVGlobalStereo(d_dwmed, 
+				SolveSmoothDualTVGlobalStereo(d_dwmed,
 					d_pw1, d_pw2,
 					pW[level], pH[level], pS[level],
 					tau, theta,
@@ -354,6 +389,10 @@ int Stereo::solveStereo() {
 				Swap(d_pw1, d_pw1s);
 				Swap(d_pw2, d_pw2s);
 			}
+
+			// Sanity Check: Limit disparity to 1
+			LimitRange(d_dwmed, 1.0f, pW[level], pH[level], pS[level], d_dwmeds);
+			Swap(d_dwmed, d_dwmeds);
 
 			//// One median filtering
 			MedianFilterDisparity(d_dwmed, pW[level], pH[level], pS[level],
@@ -381,6 +420,9 @@ int Stereo::solveStereo() {
 			Swap(d_w, d_ws);
 		}
 	}
+
+	Clone(d_w, width, height, stride, d_wForward);
+
 	if (visualizeResults) {
 		FlowToHSV(d_u, d_v, width, height, stride, d_uvrgb, flowScale);
 	}
@@ -388,14 +430,202 @@ int Stereo::solveStereo() {
 	return 0;
 }
 
+int Stereo::solveStereoBackward() {
+	// Warp i1 using vector fields
+	//WarpImage(pI1[0], width, height, stride, d_cvx, d_cvy, d_i1calibrated);
+	//Swap(pI1[0], d_i1calibrated);
+	Swap(pI0[0], pI1[0]);
+	
+	checkCudaErrors(cudaMemset(d_w, 0, dataSize));
+	checkCudaErrors(cudaMemset(d_u, 0, dataSize));
+	checkCudaErrors(cudaMemset(d_v, 0, dataSize));
+	// Construct pyramid
+	for (int level = 1; level < nLevels; level++) {
+		Swap(pI0[level], pI1[level]);
+	}
+
+	//planeSweepBackward();
+
+	//Clone(ps_disparity, pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel], d_w);
+	ComputeOpticalFlowVector(d_w, d_tvxBackward, d_tvyBackward, pW[0], pH[0], pS[0], d_u, d_v);
+
+	/*cv::Mat calibrated = cv::Mat(height, stride, CV_32F);
+	checkCudaErrors(cudaMemcpy((float *)calibrated.ptr(), ps_disparity, width * height * sizeof(float), cudaMemcpyDeviceToHost));
+	cv::imshow("calibrated", calibrated/(float)planeSweepMaxDisparity);*/
+
+	// Solve stereo
+	for (int level = nLevels - 1; level >= 0; level--) {
+		for (int warpIter = 0; warpIter < nWarpIters; warpIter++) {
+			// Compute U,V from W d_w is magnitude of vector d_tvx, d_tvy
+			// Warp using U,V
+			//std::cout << "entered" << std::endl;
+			checkCudaErrors(cudaMemset(d_du, 0, dataSize));
+			checkCudaErrors(cudaMemset(d_dv, 0, dataSize));
+			checkCudaErrors(cudaMemset(d_dw, 0, dataSize));
+
+			checkCudaErrors(cudaMemset(d_dws, 0, dataSize));
+			checkCudaErrors(cudaMemset(d_dwmed, 0, dataSize));
+			checkCudaErrors(cudaMemset(d_dwmeds, 0, dataSize));
+			checkCudaErrors(cudaMemset(d_pw1, 0, dataSize));
+			checkCudaErrors(cudaMemset(d_pw2, 0, dataSize));
+
+			FindWarpingVector(d_u, d_v, pTvxBackward[level], pTvyBackward[level], 
+				pW[level], pH[level], pS[level], d_tvx2, d_tvy2);
+			WarpImage(pI1[level], pW[level], pH[level], pS[level], d_u, d_v, d_i1warp);
+			//std::cout << pW[level] << " " << pH[level] << " " << pS[level] << std::endl;
+			ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvxBackward[level], pTvyBackward[level], 
+				pW[level], pH[level], pS[level], d_Iw, d_Iz);
+			/*if (level == 0) {
+				cv::Mat calibrated = cv::Mat(pH[level], pS[level], CV_32F);
+				checkCudaErrors(cudaMemcpy((float *)calibrated.ptr(), d_i1warp, pS[level] * pH[level] * sizeof(float), cudaMemcpyDeviceToHost));
+				cv::imshow("gradient", calibrated);
+			}*/
+
+			// Inner iteration
+			for (int iter = 0; iter < nSolverIters; ++iter)
+			{
+				SolveDataL1Stereo(d_dwmed, 
+					d_pw1, d_pw2,
+					d_Iw, d_Iz,
+					pW[level], pH[level], pS[level],
+					lambda, theta,
+					d_dwmeds); //du1 = duhat output
+				Swap(d_dwmed, d_dwmeds);
+
+				SolveSmoothDualTVGlobalStereo(d_dwmed, 
+					d_pw1, d_pw2,
+					pW[level], pH[level], pS[level],
+					tau, theta,
+					d_pw1s, d_pw2s);
+				Swap(d_pw1, d_pw1s);
+				Swap(d_pw2, d_pw2s);
+			}
+
+			// Sanity Check: Limit disparity to 1
+			LimitRange(d_dwmed, 1.0f, pW[level], pH[level], pS[level], d_dwmeds);
+			Swap(d_dwmed, d_dwmeds);
+
+			//// One median filtering
+			MedianFilterDisparity(d_dwmed, pW[level], pH[level], pS[level],
+				d_dwmeds, 5);
+			Swap(d_dwmed, d_dwmeds);
+
+			//// Calculate d_du, d_dv
+			ComputeOpticalFlowVector(d_dwmed, d_tvx2, d_tvy2, pW[level], pH[level], pS[level], d_du, d_dv);
+
+			//// update w, u, v
+			Add(d_w, d_dwmed, pH[level] * pS[level], d_w);
+			Add(d_u, d_du, pH[level] * pS[level], d_u);
+			Add(d_v, d_dv, pH[level] * pS[level], d_v);
+		}
+
+		// Upscale
+		if (level > 0)
+		{
+			float scale = fScale;
+			Upscale(d_u, pW[level], pH[level], pS[level], pW[level - 1], pH[level - 1], pS[level - 1], scale, d_us);
+			Upscale(d_v, pW[level], pH[level], pS[level], pW[level - 1], pH[level - 1], pS[level - 1], scale, d_vs);
+			Upscale(d_w, pW[level], pH[level], pS[level], pW[level - 1], pH[level - 1], pS[level - 1], scale, d_ws);
+			Swap(d_u, d_us);
+			Swap(d_v, d_vs);
+			Swap(d_w, d_ws);
+		}
+	}
+
+	Clone(d_w, width, height, stride, d_wBackward);
+
+	if (visualizeResults) {
+		FlowToHSV(d_u, d_v, width, height, stride, d_uvrgb, flowScale);
+	}
+
+	return 0;
+}
+
+int Stereo::occlusionCheck(float threshold) {
+	isOcclusionChecked = true;
+	// Get wFinal
+	OcclusionCheck(d_wForward, d_wBackward, threshold, d_uForward, d_vForward, width, height, stride, d_wFinal);
+	return 0;
+}
+
+int Stereo::planeSweepForward() {
+	// Plane sweep on level=1
+	int planeSweepLevel = 0;
+	checkCudaErrors(cudaMemset(ps_error, 0, dataSize));
+	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize));
+	checkCudaErrors(cudaMemset(ps_disparity, 0, dataSize));
+	Clone(pI1[planeSweepLevel], pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel], ps_i1warp);
+	SetValue(ps_error, planeSweepMaxError, pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel]);
+	for (int sweep = 0; sweep < planeSweepMaxDisparity; sweep += planeSweepStride) {
+		PlaneSweepCorrelation(ps_i1warp, pI0[planeSweepLevel], ps_disparity, sweep, planeSweepWindow,
+			pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel], ps_error);
+		for (int psStride = 0; psStride < planeSweepStride; psStride++) {
+			WarpImage(ps_i1warp, pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel], d_tvxForward, d_tvyForward, ps_i1warps);
+			Swap(ps_i1warp, ps_i1warps);
+		}
+	}
+	//Clone(ps_disparity, pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel], d_w);
+	return 0;
+}
+
+int Stereo::planeSweepBackward() {
+	// Plane sweep on level=1
+	int planeSweepLevel = 0;
+	checkCudaErrors(cudaMemset(ps_error, 0, dataSize));
+	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize));
+	checkCudaErrors(cudaMemset(ps_disparity, 0, dataSize));
+	Clone(pI1[planeSweepLevel], pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel], ps_i1warp);
+	SetValue(ps_error, planeSweepMaxError, pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel]);
+	for (int sweep = 0; sweep < planeSweepMaxDisparity; sweep += planeSweepStride) {
+		PlaneSweepCorrelation(ps_i1warp, pI0[planeSweepLevel], ps_disparity, sweep, planeSweepWindow,
+			pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel], ps_error);
+		for (int psStride = 0; psStride < planeSweepStride; psStride++) {
+			WarpImage(ps_i1warp, pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel],
+				d_tvxBackward, d_tvyBackward, ps_i1warps);
+			Swap(ps_i1warp, ps_i1warps);
+		}
+	}
+	return 0;
+}
+
+int Stereo::planeSweepOcclusionCheck() {
+	isPlaneSweepOcclusionChecked = true;
+	// Get wFinal
+
+	return 0;
+}
+
 int Stereo::copyStereoToHost(cv::Mat &wCropped) {
 	// Convert Disparity to Depth
-	ConvertDisparityToDepth(d_w, baseline, focal, width, height, stride, d_depth);
+	if (isOcclusionChecked) {
+		ConvertDisparityToDepth(d_wFinal, baseline, focal, width, height, stride, d_depth);
+	}
+	else {
+		ConvertDisparityToDepth(d_w, baseline, focal, width, height, stride, d_depth);
+	}
+	
 	// Remove Padding
 	//checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_w, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
 	checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_depth, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
 	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
 	wCropped = depth(roi);
+	return 0;
+}
+
+int Stereo::copyPlaneSweepToHost(cv::Mat &ps) {
+	// Convert Disparity to Depth
+	if (isPlaneSweepOcclusionChecked) {
+		ConvertDisparityToDepth(ps_disparityFinal, baseline, focal, width, height, stride, ps_depth);
+	}
+	else {
+		ConvertDisparityToDepth(ps_disparity, baseline, focal, width, height, stride, ps_depth);
+	}
+	
+	// Remove Padding
+	//checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_w, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy((float *)planeSweepDepth.ptr(), ps_depth, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
+	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
+	ps = planeSweepDepth(roi);
 	return 0;
 }
 

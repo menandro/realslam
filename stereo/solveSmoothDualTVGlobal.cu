@@ -1,6 +1,5 @@
 #include "stereo.h"
 
-
 __global__ 
 void SolveSmoothDualTVGlobalKernel (float* duhat, float* dvhat,
 	float* pu1, float* pu2,
@@ -17,7 +16,7 @@ void SolveSmoothDualTVGlobalKernel (float* duhat, float* dvhat,
 
 	if (ix >= width || iy >= height) return;
 	
-	int left = (ix - 1) + iy * stride;
+//	int left = (ix - 1) + iy * stride;
 	int right = (ix + 1) + iy * stride;
 	int down = ix + (iy - 1) * stride;
 	int up = ix + (iy + 1) * stride;
@@ -98,7 +97,7 @@ void SolveSmoothDualTVGlobalStereoKernel(float* dwhat,
 	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
 	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
 
-	const int pos = ix + iy * stride;
+//	const int pos = ix + iy * stride;
 	float desiredRadius = (float)width / 2.20f;
 	float halfWidth = (float)width / 2.0f;
 	float halfHeight = (float)height / 2.0f;
@@ -114,9 +113,9 @@ void SolveSmoothDualTVGlobalStereoKernel(float* dwhat,
 		}
 		else
 		{
-			int left = (ix - 1) + iy * stride;
+			//int left = (ix - 1) + iy * stride;
 			int right = (ix + 1) + iy * stride;
-			int down = ix + (iy - 1) * stride;
+			//int down = ix + (iy - 1) * stride;
 			int up = ix + (iy + 1) * stride;
 
 			//solve derivatives of duhat and dvhat

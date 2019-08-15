@@ -149,7 +149,15 @@ lup::Upsampling::~Upsampling() {
 }
 
 int lup::Upsampling::copyImagesToDevice(cv::Mat gray, cv::Mat sparseDepth) {
-	checkCudaErrors(cudaMemcpy(d_gray0, (float *)gray.ptr(), dataSize32f, cudaMemcpyHostToDevice));
+	if (gray.type() == CV_8U) {
+		// Convert to 32F
+		cv::Mat trueGray;
+		gray.convertTo(trueGray, CV_32F, 1.0 / 256.0);
+		checkCudaErrors(cudaMemcpy(d_gray0, (float *)trueGray.ptr(), dataSize32f, cudaMemcpyHostToDevice));
+	}
+	else {
+		checkCudaErrors(cudaMemcpy(d_gray0, (float *)gray.ptr(), dataSize32f, cudaMemcpyHostToDevice));
+	}
 	checkCudaErrors(cudaMemcpy(d_lidar, (float *)sparseDepth.ptr(), dataSize32f, cudaMemcpyHostToDevice));
 	return 0;
 }
@@ -205,6 +213,33 @@ int lup::Upsampling::propagateColorOnly(int radius) {
 	return 0;
 }
 
+int lup::Upsampling::optimizeOnly() {
+	//std::cout << "Solving TGVL2..." << std::endl;
+	isRefined = true;
+	Gradient(d_gray0, d_grad);
+	// Calculate weight
+	CalcWeight(d_lidar, d_w, lambda_tgvl2);
+	//showImage("dgrad", d_w, true);
+
+	// Normalize depth
+	//Mult(d_depth0, 1.0f / 40.0f, d_uinit);
+	NormalizeClip(d_lidar, 0.0f, maxDepth, d_uinit);
+	//showImage("lidar", d_lidar, 0.0f, 1.0f, false);
+	Clone(d_lidar, d_uinit); // Copy back to depth0
+	//showImage("lidar2", d_lidar, 0.0f, 1.0f, false);
+	//showDepthJet("uinit", d_uinit, false);
+	//showDepthJet("propagate", d_depth0, false);
+
+	// Solve TGVL2
+	//Clone(d_uinit, d_velo);
+	//Clone(d_d, d_velo);
+	//Clone(d_uinit, d_lidar);
+	Clone(d_d, d_lidar);
+	upsamplingTensorTGVL2(maxIter, beta, gamma, alpha0, alpha1, timestep_lambda);
+	Clone(d_depth, d_u);
+	return 0;
+}
+
 int lup::Upsampling::solve() {
 	//std::cout << "Solving TGVL2..." << std::endl;
 	isRefined = true;
@@ -218,7 +253,7 @@ int lup::Upsampling::solve() {
 	NormalizeClip(d_depth0, 0.0f, maxDepth, d_uinit);
 	Clone(d_depth0, d_uinit); // Copy back to depth0
 	//showDepthJet("lidar", d_lidar, false);
-	//showDepthJet("propagate", d_depth0, true);
+	//showDepthJet("propagate", d_depth0, false);
 
 	// Solve TGVL2
 	//Clone(d_uinit, d_velo);
@@ -248,6 +283,7 @@ int lup::Upsampling::upsamplingTensorTGVL2(int maxIter, float beta, float gamma,
 	// Calculate anisotropic diffucion tensor
 	Gaussian(d_gray0, d_gray0smooth);
 	CalcTensor(d_gray0smooth, beta, gamma, 2, d_a, d_b, d_c);
+	//showImage("tensor", d_a, false);
 
 	SolveEta(d_w, alpha0, alpha1, d_a, d_b, d_c, d_etau, d_etav1, d_etav2);
 	checkCudaErrors(cudaMemset(d_p, 0, dataSize32fc2));
@@ -406,6 +442,23 @@ int lup::Upsampling::saveDepthJet(std::string filename, float* input, float maxD
 }
 
 int lup::Upsampling::showDepthJet(std::string windowName, float* input, bool shouldWait) {
+	cv::Mat image = cv::Mat::zeros(cv::Size(stride, height), CV_32F);
+	float* input_sub;
+	checkCudaErrors(cudaMalloc(&input_sub, dataSize32f));
+	NormalizeClip(input, 0.0f, maxDepth, input_sub);
+	checkCudaErrors(cudaMemcpy((float *)image.ptr(), input_sub, dataSize32f, cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaFree(input_sub));
+
+	cv::Mat u_norm, u_gray, u_color;
+	u_norm = image * 256.0f;
+	u_norm.convertTo(u_gray, CV_8UC1);
+	cv::applyColorMap(u_gray, u_color, cv::COLORMAP_JET);
+
+	cv::imshow(windowName, u_color);
+	if (shouldWait) cv::waitKey();
+}
+
+void  lup::Upsampling::showDepthJet(std::string windowName, float* input, float maxDepth, bool shouldWait = true) {
 	cv::Mat image = cv::Mat::zeros(cv::Size(stride, height), CV_32F);
 	float* input_sub;
 	checkCudaErrors(cudaMalloc(&input_sub, dataSize32f));

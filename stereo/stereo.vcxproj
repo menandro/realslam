@@ -160,10 +160,15 @@
     <CudaCompile Include="addKernel.cu" />
     <CudaCompile Include="computeDerivatives.cu" />
     <CudaCompile Include="conversion.cu" />
+    <CudaCompile Include="copyClone.cu" />
     <CudaCompile Include="downscale.cu" />
     <CudaCompile Include="flowToHSV.cu" />
     <CudaCompile Include="imageConverter.cu" />
+    <CudaCompile Include="limitRange.cu" />
     <CudaCompile Include="medianFilter.cu" />
+    <CudaCompile Include="occlusion.cu" />
+    <CudaCompile Include="planeSweep.cu" />
+    <CudaCompile Include="scalar.cu" />
     <CudaCompile Include="solveDataL1.cu" />
     <CudaCompile Include="solveSmoothDualTVGlobal.cu" />
     <CudaCompile Include="stereo.cu" />

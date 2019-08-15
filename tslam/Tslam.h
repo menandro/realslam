@@ -160,6 +160,8 @@ public:
 		bool keyframeExist;
 	};
 
+	
+
 	// Device
 	rs2::context * ctx;
 	T265 t265;
@@ -169,6 +171,13 @@ public:
 
 	// Stereo
 	Stereo* stereo;
+	int stereoWidth;
+	int stereoHeight;
+	float stereoScaling;
+
+	// Upsampling
+	lup::Upsampling * upsampling;
+	float maxUpsamplingDepth;
 
 	// SLAM
 	cv::Ptr<cv::cuda::ORB> orb;
