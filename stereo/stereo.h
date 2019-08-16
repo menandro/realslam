@@ -29,6 +29,10 @@ public:
 	float *d_cvx;
 	float *d_cvy;
 	float *d_i1calibrated;
+	std::vector<float*> pTvxForward;
+	std::vector<float*> pTvyForward;
+	std::vector<float*> pTvxBackward;
+	std::vector<float*> pTvyBackward;
 
 	float *d_Iw;
 	float *d_w; // Final stereo disparity
@@ -41,10 +45,7 @@ public:
 	float *d_pw2;
 	float *d_pw1s;
 	float *d_pw2s;
-	std::vector<float*> pTvxForward;
-	std::vector<float*> pTvyForward;
-	std::vector<float*> pTvxBackward;
-	std::vector<float*> pTvyBackward;
+	
 	cv::Mat disparity;
 	cv::Mat depth;
 	float *d_depth;

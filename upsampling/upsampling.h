@@ -11,8 +11,8 @@
 
 #include "lib_link.h"
 
-#define CUDA_LIB_PATH "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v10.1/lib/x64/"
-#pragma comment(lib, CUDA_LIB_PATH "cudart.lib")
+//#define CUDA_LIB_PATH "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v10.1/lib/x64/"
+//#pragma comment(lib, CUDA_LIB_PATH "cudart.lib")
 
 //#include "common.h"
 

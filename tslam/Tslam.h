@@ -17,6 +17,7 @@ Device: T265
 #include <opencv2/cudafeatures2d.hpp>
 #include <opencv2/optflow.hpp>
 #include <stereo/stereo.h>
+#include <stereotgv/stereotgv.h>
 
 class Tslam {
 public:
@@ -171,6 +172,7 @@ public:
 
 	// Stereo
 	Stereo* stereo;
+	StereoTgv* stereotgv;
 	int stereoWidth;
 	int stereoHeight;
 	float stereoScaling;
@@ -204,6 +206,11 @@ public:
 
 	bool processGyro(T265 &device);
 	bool processAccel(T265 &device);
+
+	// Stereo
+	int initStereoTVL1();
+	int initStereoTGVL1();
+	int initDepthUpsampling();
 
 	// Utilities
 	void visualizeKeypoints(T265 &device, std::string windowNamePrefix);

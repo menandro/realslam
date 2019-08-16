@@ -21,6 +21,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "stereo", "stereo\stereo.vcx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "matlab", "matlab\matlab.vcxproj", "{4C5B9AD6-EF80-420A-BCC2-1B5C513864AD}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "stereotgv", "stereotgv\stereotgv.vcxproj", "{BC130900-E36B-4F95-8089-EACBCD4A56A3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -101,6 +103,14 @@ Global
 		{4C5B9AD6-EF80-420A-BCC2-1B5C513864AD}.Release|x64.Build.0 = Release|x64
 		{4C5B9AD6-EF80-420A-BCC2-1B5C513864AD}.Release|x86.ActiveCfg = Release|Win32
 		{4C5B9AD6-EF80-420A-BCC2-1B5C513864AD}.Release|x86.Build.0 = Release|Win32
+		{BC130900-E36B-4F95-8089-EACBCD4A56A3}.Debug|x64.ActiveCfg = Debug|x64
+		{BC130900-E36B-4F95-8089-EACBCD4A56A3}.Debug|x64.Build.0 = Debug|x64
+		{BC130900-E36B-4F95-8089-EACBCD4A56A3}.Debug|x86.ActiveCfg = Debug|Win32
+		{BC130900-E36B-4F95-8089-EACBCD4A56A3}.Debug|x86.Build.0 = Debug|Win32
+		{BC130900-E36B-4F95-8089-EACBCD4A56A3}.Release|x64.ActiveCfg = Release|x64
+		{BC130900-E36B-4F95-8089-EACBCD4A56A3}.Release|x64.Build.0 = Release|x64
+		{BC130900-E36B-4F95-8089-EACBCD4A56A3}.Release|x86.ActiveCfg = Release|Win32
+		{BC130900-E36B-4F95-8089-EACBCD4A56A3}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
