@@ -1,7 +1,7 @@
 #include "stereo.h"
 
 /// scalar field to upscale
-texture<float, 2, cudaReadModeElementType> texCoarse;
+texture<float, cudaTextureType2D, cudaReadModeElementType> texCoarse;
 
 __global__ void UpscaleKernel(int width, int height, int stride, float scale, float *out)
 {

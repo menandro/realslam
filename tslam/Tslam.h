@@ -210,7 +210,11 @@ public:
 	// Stereo
 	int initStereoTVL1();
 	int initStereoTGVL1();
+	int solveStereoTGVL1();
 	int initDepthUpsampling();
+	cv::Mat depthVisMask;
+	bool isDepthVisMaskCreated = false;
+
 
 	// Utilities
 	void visualizeKeypoints(T265 &device, std::string windowNamePrefix);

@@ -1,8 +1,8 @@
 #include "stereotgv.h"
 
 /// image to downscale
-texture<float, 2, cudaReadModeElementType> texFine;
-texture<float2, 2, cudaReadModeElementType> texFineFloat2;
+texture<float, cudaTextureType2D, cudaReadModeElementType> texFine;
+texture<float2, cudaTextureType2D, cudaReadModeElementType> texFineFloat2;
 
 __global__ void TgvDownscaleKernel(int width, int height, int stride, float *out)
 {
@@ -87,7 +87,7 @@ void StereoTgv::Downscale(const float2 *src, int width, int height, int stride,
 	texFineFloat2.filterMode = cudaFilterModeLinear;
 	texFineFloat2.normalized = true;
 
-	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float2>();
 
 	checkCudaErrors(cudaBindTexture2D(0, texFineFloat2, src, width, height, stride * sizeof(float2)));
 
@@ -183,9 +183,9 @@ void StereoTgv::Downscale(const float2 *src, int width, int height, int stride,
 	texFineFloat2.filterMode = cudaFilterModeLinear;
 	texFineFloat2.normalized = true;
 
-	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float2>();
 
-	checkCudaErrors(cudaBindTexture2D(0, texFineFloat2, src, width, height, stride * sizeof(float)));
+	checkCudaErrors(cudaBindTexture2D(0, texFineFloat2, src, width, height, stride * sizeof(float2)));
 
 	TgvDownscaleScalingKernel << < blocks, threads >> > (newWidth, newHeight, newStride, scale, out);
 }

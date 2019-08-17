@@ -1,8 +1,8 @@
 #include "stereotgv.h"
 
 /// scalar field to upscale
-texture<float, 2, cudaReadModeElementType> texCoarse;
-texture<float2, 2, cudaReadModeElementType> texCoarseFloat2;
+texture<float, cudaTextureType2D, cudaReadModeElementType> texCoarse;
+texture<float2, cudaTextureType2D, cudaReadModeElementType> texCoarseFloat2;
 
 __global__ void TgvUpscaleKernel(int width, int height, int stride, float scale, float *out)
 {
@@ -71,9 +71,9 @@ void StereoTgv::Upscale(const float2 *src, int width, int height, int stride,
 	texCoarseFloat2.filterMode = cudaFilterModeLinear;
 	texCoarseFloat2.normalized = true;
 
-	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float2>();
 
-	cudaBindTexture2D(0, texCoarseFloat2, src, width, height, stride * sizeof(float));
+	cudaBindTexture2D(0, texCoarseFloat2, src, width, height, stride * sizeof(float2));
 
 	TgvUpscaleFloat2Kernel << < blocks, threads >> > (newWidth, newHeight, newStride, scale, out);
 }

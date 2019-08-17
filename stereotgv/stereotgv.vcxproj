@@ -156,12 +156,18 @@
   <ItemGroup>
     <CudaCompile Include="calcTensor.cu" />
     <CudaCompile Include="computeDerivatives.cu" />
+    <CudaCompile Include="conversion.cu" />
     <CudaCompile Include="copyClone.cu" />
     <CudaCompile Include="downscale.cu" />
     <CudaCompile Include="imageConverter.cu" />
+    <CudaCompile Include="limitRange.cu" />
+    <CudaCompile Include="medianFilter.cu" />
     <CudaCompile Include="preconditioning.cu" />
     <CudaCompile Include="scalar.cu" />
     <CudaCompile Include="stereotgv.cu" />
+    <CudaCompile Include="thresholdingL1.cu" />
+    <CudaCompile Include="updateDualVariables.cu" />
+    <CudaCompile Include="updatePrimalVariables.cu" />
     <CudaCompile Include="upscale.cu" />
     <CudaCompile Include="warpImage.cu" />
   </ItemGroup>

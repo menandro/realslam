@@ -1,7 +1,7 @@
 #include "stereotgv.h"
 
-texture<float, 2, cudaReadModeElementType> texI0;
-texture<float, 2, cudaReadModeElementType> texI1;
+texture<float, cudaTextureType2D, cudaReadModeElementType> texI0;
+texture<float, cudaTextureType2D, cudaReadModeElementType> texI1;
 
 __global__ void TgvComputeDerivativesKernel(int width, int height, int stride,
 	float *Ix, float *Iy, float *Iz)

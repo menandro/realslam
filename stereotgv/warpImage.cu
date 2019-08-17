@@ -1,10 +1,12 @@
 #include "stereotgv.h"
 
 /// image to warp
-texture<float, 2, cudaReadModeElementType> texToWarp;
-texture<float2, 2, cudaReadModeElementType> texTv;
+texture<float, cudaTextureType2D, cudaReadModeElementType> texToWarp;
+texture<float2, cudaTextureType2D, cudaReadModeElementType> texTv;
+texture<float, cudaTextureType2D, cudaReadModeElementType> texTvx;
+texture<float, cudaTextureType2D, cudaReadModeElementType> texTvy;
 
-__global__ void WarpingKernel(int width, int height, int stride,
+__global__ void TgvWarpingKernel(int width, int height, int stride,
 	const float2 *warpUV, float *out)
 {
 	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
@@ -36,15 +38,62 @@ void StereoTgv::WarpImage(const float *src, int w, int h, int s,
 
 	cudaBindTexture2D(0, texToWarp, src, w, h, s * sizeof(float));
 
-	WarpingKernel << <blocks, threads >> > (w, h, s, warpUV, out);
+	TgvWarpingKernel << <blocks, threads >> > (w, h, s, warpUV, out);
 }
-
 
 // **************************************************
 // ** Find Warping vector direction (tvx2, tvy2) for Fisheye Stereo
 // **************************************************
 
 __global__ void TgvFindWarpingVectorKernel(const float2 *warpUV,
+	int width, int height, int stride, float2 *tvx2)
+{
+	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
+	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
+
+	const int pos = ix + iy * stride;
+
+	if (ix >= width || iy >= height) return;
+
+	float x = ((float)ix + warpUV[pos].x + 0.5f) / (float)width;
+	float y = ((float)iy + warpUV[pos].y + 0.5f) / (float)height;
+
+	tvx2[pos].x = tex2D(texTvx, x, y);
+	tvx2[pos].x = tex2D(texTvy, x, y);
+	//tv2[pos] = make_float2(x, y);
+}
+
+void StereoTgv::FindWarpingVector(const float2 *warpUV, const float *tvx, const float *tvy,
+	int w, int h, int s, float2 *tv2)
+{
+	dim3 threads(BlockWidth, BlockHeight);
+	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
+
+	// mirror if a coordinate value is out-of-range
+	texTvx.addressMode[0] = cudaAddressModeMirror;
+	texTvx.addressMode[1] = cudaAddressModeMirror;
+	texTvx.filterMode = cudaFilterModeLinear;
+	texTvx.normalized = true;
+
+	texTvy.addressMode[0] = cudaAddressModeMirror;
+	texTvy.addressMode[1] = cudaAddressModeMirror;
+	texTvy.filterMode = cudaFilterModeLinear;
+	texTvy.normalized = true;
+
+	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+
+	cudaBindTexture2D(0, texTvx, tvx, w, h, s * sizeof(float));
+	cudaBindTexture2D(0, texTvy, tvy, w, h, s * sizeof(float));
+
+	TgvFindWarpingVectorKernel << <blocks, threads >> > (warpUV, w, h, s, tv2);
+}
+
+
+// **************************************************
+// ** Find Warping vector direction tv2<float2> for Fisheye Stereo
+// **************************************************
+
+__global__ void TgvFindWarpingVectorFloat2Kernel(const float2 *warpUV,
 	int width, int height, int stride, float2 *tv2)
 {
 	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
@@ -58,6 +107,7 @@ __global__ void TgvFindWarpingVectorKernel(const float2 *warpUV,
 	float y = ((float)iy + warpUV[pos].y + 0.5f) / (float)height;
 
 	tv2[pos] = tex2D(texTv, x, y);
+	//tv2[pos] = make_float2(x, y);
 }
 
 void StereoTgv::FindWarpingVector(const float2 *warpUV, const float2 *tv,
@@ -72,11 +122,11 @@ void StereoTgv::FindWarpingVector(const float2 *warpUV, const float2 *tv,
 	texTv.filterMode = cudaFilterModeLinear;
 	texTv.normalized = true;
 
-	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float2>();
 
-	cudaBindTexture2D(0, texTv, tv, w, h, s * sizeof(float));
+	cudaBindTexture2D(NULL, texTv, tv, w, h, s * sizeof(float2));
 
-	TgvFindWarpingVectorKernel << <blocks, threads >> > (warpUV, w, h, s, tv2);
+	TgvFindWarpingVectorFloat2Kernel << <blocks, threads >> > (warpUV, w, h, s, tv2);
 }
 
 // **************************************************

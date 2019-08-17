@@ -54,8 +54,11 @@ public:
 	float* d_u, *d_du, *d_us;
 	// Output Depth
 	float* d_depth;
+	cv::Mat depth;
 	// Warping Variables
 	float2 *d_warpUV, *d_warpUVs, *d_dwarpUV;
+	//float *d_warpX, *d_warpXs, *d_dwarpX;
+	//float *d_warpY, *d_warpYs, *d_dwarpY;
 
 	std::vector<float*> pI0;
 	std::vector<float*> pI1;
@@ -100,6 +103,7 @@ public:
 	int loadVectorFields(cv::Mat translationVector, cv::Mat calibrationVector);
 	int copyImagesToDevice(cv::Mat i0, cv::Mat i1);
 	int solveStereoForward();
+	int copyStereoToHost(cv::Mat &wCropped);
 
 	// UTILITIES
 	int iAlignUp(int n);
@@ -108,10 +112,18 @@ public:
 	template<typename T> void Copy(T &dst, T &src);
 
 	// Kernels
+	void MedianFilterDisparity(float *inputu,
+		int w, int h, int s, float *outputu, int kernelsize);
+	void MedianFilter3D(float *X, float *Y, float *Z,
+		int w, int h, int s, float *X1, float *Y1, float *Z1, int kernelsize);
+	void MedianFilter(float *inputu, float *inputv,
+		int w, int h, int s, float *outputu, float*outputv, int kernelsize);
+	void LimitRange(float *src, float upperLimit, int w, int h, int s, float *dst);
 	void ScalarMultiply(float *src, float scalar, int w, int h, int s);
 	//void ScalarMultiply(float2 *src, float scalar, int w, int h, int s);
 	void ScalarMultiply(float *src, float scalar, int w, int h, int s, float *dst);
 	void ScalarMultiply(float2 *src, float scalar, int w, int h, int s, float2 *dst);
+	void Add(float *src1, float* src2, int w, int h, int s, float* dst);
 	void Add(float2 *src1, float2* src2, int w, int h, int s, float2* dst);
 	void Subtract(float *minuend, float* subtrahend, int w, int h, int s, float* difference);
 	void Downscale(const float *src, int width, int height, int stride,
@@ -130,6 +142,8 @@ public:
 		int w, int h, int s, float2 *warpUV);
 	void FindWarpingVector(const float2 *warpUV, const float2 *tv, int w, int h, int s,
 		float2 *tv2);
+	void FindWarpingVector(const float2 *warpUV, const float *tvx, const float *tvy,
+		int w, int h, int s, float2 *tv2);
 	void CalcTensor(float* gray, float beta, float gamma, int size_grad,
 		int w, int h, int s, float* a, float* b, float* c);
 	void Gaussian(float* input, int w, int h, int s, float* output);
@@ -146,19 +160,24 @@ public:
 		int newWidth, int newHeight, int newStride, float scale, float *out);
 	void Upscale(const float2 *src, int width, int height, int stride,
 		int newWidth, int newHeight, int newStride, float scale, float2 *out);
+	void ConvertDisparityToDepth(float *disparity, float baseline, float focal, int w, int h, int s, float *depth);
 
 	void UpdateDualVariablesTGV(float* u_, float2 *v_, float alpha0, float alpha1, float sigma,
 		float eta_p, float eta_q, float* a, float* b, float* c,
 		int w, int h, int s,
 		float4* grad_v, float2* p, float4* q);
-	void ThresholdingL1(float2* Tp, )
-	void UpdatePrimalVariables(float2* Tp, float* u_, float2* v_, float2* p, float4* q,
+	void ThresholdingL1(float2* Tp, float* u_, float* Iu, float* Iz,
+		float lambda, float tau, float* eta_u, float* u, float* us,
+		int w, int h, int s);
+	void UpdatePrimalVariables(float* u_, float2* v_, float2* p, float4* q,
 		float* a, float* b, float* c,
-		float tau, float* eta_u, float* eta_v1, float* eta_v2,
+		float tau, float* eta_v1, float* eta_v2,
 		float alpha0, float alpha1, float mu,
-		int w, int h, int s,
-		float* u, float2* v, float* u_s, float2* v_s);
+		float* u, float2* v,
+		float* u_s, float2* v_s,
+		int w, int h, int s);
 	void SolveTp(float* a, float* b, float* c, float2* p, 
 		int w, int h, int s, float2* Tp);
+
 
 };

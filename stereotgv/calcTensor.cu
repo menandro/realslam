@@ -1,7 +1,7 @@
 #include "stereotgv.h"
 
-texture<float, 2, cudaReadModeElementType> gray_img;
-texture<float, 2, cudaReadModeElementType> imgToFilter;
+texture<float, cudaTextureType2D, cudaReadModeElementType> gray_img;
+texture<float, cudaTextureType2D, cudaReadModeElementType> imgToFilter;
 
 // Calculate anisotropic diffusion tensor
 __global__ 
