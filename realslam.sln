@@ -23,6 +23,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "matlab", "matlab\matlab.vcx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "stereotgv", "stereotgv\stereotgv.vcxproj", "{BC130900-E36B-4F95-8089-EACBCD4A56A3}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_fisheyestereo", "test_fisheyestereo\test_fisheyestereo.vcxproj", "{4CDB33B4-FB6F-4C9F-8CA4-269D1D010679}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -111,6 +113,14 @@ Global
 		{BC130900-E36B-4F95-8089-EACBCD4A56A3}.Release|x64.Build.0 = Release|x64
 		{BC130900-E36B-4F95-8089-EACBCD4A56A3}.Release|x86.ActiveCfg = Release|Win32
 		{BC130900-E36B-4F95-8089-EACBCD4A56A3}.Release|x86.Build.0 = Release|Win32
+		{4CDB33B4-FB6F-4C9F-8CA4-269D1D010679}.Debug|x64.ActiveCfg = Debug|x64
+		{4CDB33B4-FB6F-4C9F-8CA4-269D1D010679}.Debug|x64.Build.0 = Debug|x64
+		{4CDB33B4-FB6F-4C9F-8CA4-269D1D010679}.Debug|x86.ActiveCfg = Debug|Win32
+		{4CDB33B4-FB6F-4C9F-8CA4-269D1D010679}.Debug|x86.Build.0 = Debug|Win32
+		{4CDB33B4-FB6F-4C9F-8CA4-269D1D010679}.Release|x64.ActiveCfg = Release|x64
+		{4CDB33B4-FB6F-4C9F-8CA4-269D1D010679}.Release|x64.Build.0 = Release|x64
+		{4CDB33B4-FB6F-4C9F-8CA4-269D1D010679}.Release|x86.ActiveCfg = Release|Win32
+		{4CDB33B4-FB6F-4C9F-8CA4-269D1D010679}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

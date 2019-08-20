@@ -6,6 +6,15 @@ int main() {
 	Tslam *tslam = new Tslam();
 	tslam->initialize("852212110449");
 	tslam->run();
+
+	/*double scale = 2.0;
+	cv::Mat mask = cv::Mat::zeros(cv::Size(848 / scale, 800/scale), CV_8UC1);
+	cv::Mat output;
+	cv::circle(mask, cv::Point(421.500/ scale, 402.500 / scale), 382.5552 / scale, cv::Scalar(255, 255, 255), -1);
+	cv::imshow("mask", mask);
+	cv::imwrite("maskHalf.png", mask);
+	cv::waitKey();*/
+
 	//tslam->testStereo("fs1.png", "fs2.png");
 
 	/*Rslam* rslam = new Rslam();

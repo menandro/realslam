@@ -120,3 +120,118 @@ void StereoTgv::SolveTp(float* a, float* b, float* c, float2* p,
 	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
 	TgvSolveTpKernel << < blocks, threads >> > (a, b, c, p, Tp, w, h, s);
 }
+
+
+// *******************************
+// MaSkEd VERSION
+// *******************************
+__global__ void TgvThresholdingL1MaskedKernel(float2* Tp, float* u_, float* Iu, float* Iz, float* mask, 
+	float lambda, float tau, float* eta_u, float* u, float* us,
+	int width, int height, int stride)
+{
+	int iy = blockIdx.y * blockDim.y + threadIdx.y;        // current row 
+	int ix = blockIdx.x * blockDim.x + threadIdx.x;        // current column 
+
+	if ((iy >= height) && (ix >= width)) return;
+	int pos = ix + iy * stride;
+	if (mask[pos] == 0.0f) return;
+
+	int right = (ix + 1) + iy * stride;
+	int down = ix + (iy + 1) * stride;
+	int left = (ix - 1) + iy * stride;
+	int up = ix + (iy - 1) * stride;
+
+	//div_p = dxm(Tp(:, : , 1)) + dym(Tp(:, : , 2));
+	float div_p;
+	float dxmTp, dymTp;
+	
+	//if ((ix - 1) >= 0)
+	if ((mask[left] != 0.0f) && (mask[right] != 0.0f))
+		dxmTp = Tp[pos].x - Tp[left].x;
+	else if (mask[right] == 0.0f)
+		dxmTp = -Tp[left].x;
+	else
+		dxmTp = Tp[pos].x;
+
+	if ((mask[up] != 0.0f) && (mask[down] != 0.0f))
+		dymTp = Tp[pos].y - Tp[up].y;
+	else if (mask[down] == 0.0f)
+		dymTp = -Tp[up].y;
+	else
+		dymTp = Tp[pos].y;
+
+	div_p = dxmTp + dymTp;
+
+	//tau_eta_u = tau. / eta_u;
+	float tau_eta_u;
+	if (eta_u[pos] == 0) {
+		tau_eta_u = tau;
+	}
+	else {
+		tau_eta_u = tau / eta_u[pos];
+	}
+
+	// Thresholding
+	float uhat = u_[pos] + tau_eta_u * div_p;
+
+	float dun = (uhat - u[pos]);
+
+	float Ius = Iu[pos];
+	float rho = Ius * dun + Iz[pos];
+
+	float upper = lambda * tau_eta_u*(Ius*Ius);
+	float lower = -lambda * tau_eta_u*(Ius*Ius);
+	float du;
+
+	if ((rho <= upper) && (rho >= lower)) {
+		if (Ius == 0) {
+			du = dun;
+		}
+		else {
+			du = dun - rho / Ius;
+		}
+	}
+	else if (rho < lower) {
+		du = dun + lambda * tau_eta_u*Ius;
+	}
+	else if (rho > upper) {
+		du = dun - lambda * tau_eta_u*Ius;
+	}
+
+	us[pos] = u[pos] + du;
+}
+
+void StereoTgv::ThresholdingL1Masked(float2* Tp, float* u_, float* Iu, float* Iz, float * mask,
+	float lambda, float tau, float* eta_u, float* u, float* us,
+	int w, int h, int s)
+{
+	dim3 threads(BlockWidth, BlockHeight);
+	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
+
+	TgvThresholdingL1MaskedKernel << < blocks, threads >> > (Tp, u_, Iu, Iz, mask,
+		lambda, tau, eta_u, u, us,
+		w, h, s);
+}
+
+
+//**************************
+// Solve Tp
+// ***************************
+__global__ void TgvSolveTpMaskedKernel(float* mask, float*a, float *b, float*c, float2* p, float2* Tp, int width, int height, int stride) {
+	int iy = blockIdx.y * blockDim.y + threadIdx.y;        // current row 
+	int ix = blockIdx.x * blockDim.x + threadIdx.x;        // current column 
+
+	if ((iy >= height) && (ix >= width)) return;
+	int pos = ix + iy * stride;
+	if (mask[pos] == 0.0f) return;
+
+	Tp[pos].x = a[pos] * p[pos].x + c[pos] * p[pos].y;
+	Tp[pos].y = c[pos] * p[pos].x + b[pos] * p[pos].y;
+}
+
+void StereoTgv::SolveTpMasked(float* mask, float* a, float* b, float* c, float2* p,
+	int w, int h, int s, float2* Tp) {
+	dim3 threads(BlockWidth, BlockHeight);
+	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
+	TgvSolveTpMaskedKernel << < blocks, threads >> > (mask, a, b, c, p, Tp, w, h, s);
+}

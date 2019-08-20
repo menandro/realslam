@@ -19,7 +19,7 @@ int Tslam::initialize(const char* serialNumber) {
 			std::vector<rs2::sensor> sensors = devfound.query_sensors();
 			sensors[0].set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0);
 			sensors[0].set_option(RS2_OPTION_EXPOSURE, 16000);
-			sensors[0].set_option(RS2_OPTION_GAIN, 3);
+			sensors[0].set_option(RS2_OPTION_GAIN, 1);
 
 			// Create pipeline for device0
 			if (isThisDevice(serialNo, serialNumber)) {
@@ -84,10 +84,10 @@ int Tslam::initStereoTGVL1() {
 	float alpha0 = 5.0f;
 	float alpha1 = 1.0f;
 	float timeStepLambda = 1.0f;
-	float lambda = 1.0f;
-	float nLevel = 4;
+	float lambda = 5.0f;
+	float nLevel = 3;
 	float fScale = 2.0f;
-	int nWarpIters = 10;
+	int nWarpIters = 20;
 	int nSolverIters = 20;
 	stereotgv->initialize(stereoWidth, stereoHeight, beta, gamma, alpha0, alpha1,
 		timeStepLambda, lambda, nLevel, fScale, nWarpIters, nSolverIters);
@@ -320,7 +320,7 @@ int Tslam::solveStereoTGVL1() {
 	cv::Mat i2fixed = cv::imread("fs2.png", cv::IMREAD_GRAYSCALE);
 	cv::equalizeHist(i1fixed, equi1);
 	cv::equalizeHist(i2fixed, equi2);*/
-	cv::imshow("equi", equi1);
+	//cv::imshow("equi", equi1);
 	cv::resize(equi1, halfFisheye1, cv::Size(stereoWidth, stereoHeight));
 	cv::resize(equi2, halfFisheye2, cv::Size(stereoWidth, stereoHeight));
 	//cv::resize(t265.fisheye1, halfFisheye1, cv::Size(stereoWidth, stereoHeight));

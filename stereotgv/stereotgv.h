@@ -66,7 +66,11 @@ public:
 	std::vector<int> pH;
 	std::vector<int> pS;
 	std::vector<int> pDataSize;
-
+	
+	cv::Mat fisheyeMaskPad;
+	float* d_fisheyeMask;
+	std::vector<float*> pFisheyeMask;
+	
 	// TGVL1 Process variables
 	float *d_a, *d_b, *d_c; // Tensor
 	float *d_etau, *d_etav1, *d_etav2;
@@ -102,7 +106,9 @@ public:
 		int nLevels, float fScale, int nWarpIters, int nSolverIters);
 	int loadVectorFields(cv::Mat translationVector, cv::Mat calibrationVector);
 	int copyImagesToDevice(cv::Mat i0, cv::Mat i1);
+	int copyMaskToDevice(cv::Mat mask);
 	int solveStereoForward();
+	int solveStereoForwardMasked();
 	int copyStereoToHost(cv::Mat &wCropped);
 
 	// UTILITIES
@@ -179,5 +185,55 @@ public:
 	void SolveTp(float* a, float* b, float* c, float2* p, 
 		int w, int h, int s, float2* Tp);
 
-
+	// Kernels Masked version
+	void GaussianMasked(float* input, float* mask, int w, int h, int s, float* output);
+	void CalcTensorMasked(float* gray, float* mask, float beta, float gamma, int size_grad,
+		int w, int h, int s, float* a, float* b, float* c);
+	void ComputeDerivativesFisheyeMasked(float *I0, float *I1, float2 *vector, float* mask,
+		int w, int h, int s, float *Iw, float *Iz);
+	void ConvertDisparityToDepthMasked(float *disparity, float* mask, float baseline, float focal,
+		int w, int h, int s, float *depth);
+	void DownscaleNearestNeighbor(const float *src, int width, int height, int stride,
+		int newWidth, int newHeight, int newStride, float *out);
+	void DownscaleMasked(const float *src, float *mask, int width, int height, int stride,
+		int newWidth, int newHeight, int newStride, float *out);
+	void DownscaleMasked(const float2 *src, float * mask, int width, int height, int stride,
+		int newWidth, int newHeight, int newStride, float2 *out);
+	void DownscaleMasked(const float *src, float* mask, int width, int height, int stride,
+		int newWidth, int newHeight, int newStride, float scale, float *out);
+	void DownscaleMasked(const float2 *src, float * mask, int width, int height, int stride,
+		int newWidth, int newHeight, int newStride, float scale, float2 *out);
+	void MedianFilterDisparityMasked(float *inputu, float* mask,
+		int w, int h, int s, float *outputu, int kernelsize);
+	void SolveEtaMasked(float* mask, float alpha0, float alpha1,
+		float* a, float *b, float* c, int w, int h, int s, float* etau, float* etav1, float* etav2);
+	void UpscaleMasked(const float *src, float* mask, int width, int height, int stride,
+		int newWidth, int newHeight, int newStride, float scale, float *out);
+	void UpscaleMasked(const float2 *src, float * mask, int width, int height, int stride,
+		int newWidth, int newHeight, int newStride, float scale, float2 *out);
+	void ComputeOpticalFlowVectorMasked(const float *u, const float2 *tv2, float* mask,
+		int w, int h, int s, float2 *warpUV);
+	void FindWarpingVectorMasked(const float2 *warpUV, float* mask, const float2 *tv,
+		int w, int h, int s, float2 *tv2);
+	void FindWarpingVectorMasked(const float2 *warpUV, float* mask, const float *tvx, const float *tvy,
+		int w, int h, int s, float2 *tv2);
+	void WarpImageMasked(const float *src, float* mask, int w, int h, int s,
+		const float2 *warpUV, float *out);
+	void ThresholdingL1Masked(float2* Tp, float* u_, float* Iu, float* Iz, float * mask,
+		float lambda, float tau, float* eta_u, float* u, float* us,
+		int w, int h, int s);
+	void SolveTpMasked(float* mask, float* a, float* b, float* c, float2* p,
+		int w, int h, int s, float2* Tp);
+	void UpdateDualVariablesTGVMasked(float* mask, float* u_, float2 *v_, float alpha0, float alpha1, float sigma,
+		float eta_p, float eta_q,
+		float* a, float* b, float* c,
+		int w, int h, int s,
+		float4* grad_v, float2* p, float4* q);
+	void UpdatePrimalVariablesMasked(float * mask, float* u_, float2* v_, float2* p, float4* q,
+		float* a, float* b, float* c,
+		float tau, float* eta_v1, float* eta_v2,
+		float alpha0, float alpha1, float mu,
+		float* u, float2* v,
+		float* u_s, float2* v_s,
+		int w, int h, int s);
 };

@@ -21,3 +21,30 @@ void StereoTgv::ConvertDisparityToDepth(float *disparity, float baseline, float 
 
 	TgvConvertDisparityToDepthKernel << <blocks, threads >> > (disparity, baseline, focal, w, h, s, depth);
 }
+
+
+//*******************
+// Masked
+//*******************
+__global__ void TgvConvertDisparityToDepthMaskedKernel(float *disparity, float* mask, float baseline,
+	float focal, int width, int height, int stride, float *depth)
+{
+	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
+	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
+
+	if ((iy >= height) && (ix >= width)) return;
+	int pos = ix + iy * stride;
+	if (mask[pos] == 0.0f) return;
+
+	depth[pos] = baseline * focal / disparity[pos];
+}
+
+
+void StereoTgv::ConvertDisparityToDepthMasked(float *disparity, float* mask, float baseline, float focal, 
+	int w, int h, int s, float *depth)
+{
+	dim3 threads(BlockWidth, BlockHeight);
+	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
+
+	TgvConvertDisparityToDepthMaskedKernel << <blocks, threads >> > (disparity, mask, baseline, focal, w, h, s, depth);
+}
