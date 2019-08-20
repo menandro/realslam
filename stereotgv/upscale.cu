@@ -90,7 +90,7 @@ __global__ void TgvUpscaleMaskedKernel(float * mask, int width, int height, int 
 
 	if ((iy >= height) && (ix >= width)) return;
 	int pos = ix + iy * stride;
-	if (mask[pos] == 0.0f) return;
+	//if (mask[pos] == 0.0f) return;
 
 	float x = ((float)ix + 0.5f) / (float)width;
 	float y = ((float)iy + 0.5f) / (float)height;
@@ -98,6 +98,12 @@ __global__ void TgvUpscaleMaskedKernel(float * mask, int width, int height, int 
 	// exploit hardware interpolation
 	// and scale interpolated vector to match next pyramid level resolution
 	out[pos] = tex2D(texCoarse, x, y) * scale;
+
+	//if (ix >= width || iy >= height) return;
+
+	//// exploit hardware interpolation
+	//// and scale interpolated vector to match next pyramid level resolution
+	//out[ix + iy * stride] = tex2D(texCoarse, x, y) * scale;
 }
 
 void StereoTgv::UpscaleMasked(const float *src, float* mask, int width, int height, int stride,

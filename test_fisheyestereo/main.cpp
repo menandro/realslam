@@ -71,10 +71,10 @@ int main(void) {
 	float alpha1 = 1.0f;
 	float timeStepLambda = 1.0f;
 	float lambda = 3.0f;
-	float nLevel = 3;
-	float fScale = 2.0f;
-	int nWarpIters = 100;
-	int nSolverIters = 1000;
+	float nLevel = 7;
+	float fScale = 1.5f;
+	int nWarpIters = 20;
+	int nSolverIters = 20;
 	stereotgv->initialize(stereoWidth, stereoHeight, beta, gamma, alpha0, alpha1,
 		timeStepLambda, lambda, nLevel, fScale, nWarpIters, nSolverIters);
 	stereotgv->visualizeResults = true;
@@ -116,8 +116,8 @@ int main(void) {
 
 	//std::cout << (int)halfFisheye1.at<uchar>(200, 200) << std::endl;
 	stereotgv->copyImagesToDevice(halfFisheye1, halfFisheye2);
-	stereotgv->solveStereoForward();
-	//stereotgv->solveStereoForwardMasked();
+	//stereotgv->solveStereoForward();
+	stereotgv->solveStereoForwardMasked();
 	
 	cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
 	cv::Mat depthVis;
