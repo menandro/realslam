@@ -83,14 +83,18 @@ int StereoTgv::initialize(int width, int height, float beta, float gamma,
 		checkCudaErrors(cudaMalloc(&pTvBackward[level], 2 * pDataSize[level]));
 		checkCudaErrors(cudaMalloc(&pFisheyeMask[level], pDataSize[level]));
 
+		std::cout << newHeight << " " << newWidth << " " << newStride << std::endl;
+
 		pW[level] = newWidth;
 		pH[level] = newHeight;
 		pS[level] = newStride;
 		newHeight = (int)((float)newHeight / fScale);
 		newWidth = (int)((float)newWidth / fScale);
 		newStride = iAlignUp(newWidth);
+		
 	}
 
+	std::cout << stride << " " << height << std::endl;
 	dataSize8u = stride * height * sizeof(uchar);
 	dataSize8uc3 = stride * height * sizeof(uchar3);
 	dataSize32f = stride * height * sizeof(float);
@@ -177,12 +181,12 @@ int StereoTgv::loadVectorFields(cv::Mat translationVector, cv::Mat calibrationVe
 	ScalarMultiply(d_tvForward, -1.0f, width, height, stride, d_tvBackward);
 	pTvBackward[0] = d_tvBackward;
 	for (int level = 1; level < nLevels; level++) {
-		//std::cout << pW[level] << " " << pH[level] << " " << pS[level] << std::endl;
+		std::cout << "vectorfields " << pW[level] << " " << pH[level] << " " << pS[level] << std::endl;
 		Downscale(pTvForward[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
 			pW[level], pH[level], pS[level], pTvForward[level]);
 		Downscale(pTvBackward[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
 			pW[level], pH[level], pS[level], pTvBackward[level]);
-
+		
 	}
 
 	// Calibration Vector Field
@@ -370,7 +374,6 @@ int StereoTgv::solveStereoForwardMasked() {
 	//WarpImageMasked(pI1[0], pFisheyeMask[0], width, height, stride, d_cv, d_i1calibrated);
 	WarpImage(pI1[0], width, height, stride, d_cv, d_i1calibrated);
 	Swap(pI1[0], d_i1calibrated);
-	//DEBUGIMAGE("i1", pI1[0], height, stride, true, false);
 
 	checkCudaErrors(cudaMemset(d_u, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(d_u_, 0, dataSize32f));
@@ -378,10 +381,6 @@ int StereoTgv::solveStereoForwardMasked() {
 
 	// Construct pyramid
 	for (int level = 1; level < nLevels; level++) {
-		/*DownscaleMasked(pI0[level - 1], pFisheyeMask[0], pW[level - 1], pH[level - 1], pS[level - 1],
-			pW[level], pH[level], pS[level], pI0[level]);
-		DownscaleMasked(pI1[level - 1], pFisheyeMask[0], pW[level - 1], pH[level - 1], pS[level - 1],
-			pW[level], pH[level], pS[level], pI1[level]);*/
 		Downscale(pI0[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
 			pW[level], pH[level], pS[level], pI0[level]);
 		Downscale(pI1[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
@@ -401,19 +400,14 @@ int StereoTgv::solveStereoForwardMasked() {
 		float eta_q = 2.0f;
 
 		if (level == nLevels - 1) {
-			//ComputeOpticalFlowVectorMasked(d_u, pTvForward[level], pFisheyeMask[level], pW[level], pH[level], pS[level], d_warpUV);
 			ComputeOpticalFlowVector(d_u, pTvForward[level], pW[level], pH[level], pS[level], d_warpUV);
 		}
 
 		// Calculate anisotropic diffucion tensor
 		GaussianMasked(pI0[level], pFisheyeMask[level], pW[level], pH[level], pS[level], d_i0smooth);
-		//Gaussian(pI0[level], pW[level], pH[level], pS[level], d_i0smooth);
 		CalcTensorMasked(d_i0smooth, pFisheyeMask[level], beta, gamma, 2, pW[level], pH[level], pS[level], d_a, d_b, d_c);
-		//CalcTensor(d_i0smooth, beta, gamma, 2, pW[level], pH[level], pS[level], d_a, d_b, d_c);
 		SolveEtaMasked(pFisheyeMask[level], alpha0, alpha1, d_a, d_b, d_c,
 			pW[level], pH[level], pS[level], d_etau, d_etav1, d_etav2);
-		/*SolveEta(alpha0, alpha1, d_a, d_b, d_c,
-			pW[level], pH[level], pS[level], d_etau, d_etav1, d_etav2);*/
 
 		for (int warpIter = 0; warpIter < nWarpIters; warpIter++) {
 			checkCudaErrors(cudaMemset(d_p, 0, dataSize32fc2));
@@ -422,27 +416,12 @@ int StereoTgv::solveStereoForwardMasked() {
 			Clone(d_v_, pW[level], pH[level], pS[level], d_v);
 			checkCudaErrors(cudaMemset(d_gradv, 0, dataSize32fc4));
 			checkCudaErrors(cudaMemset(d_du, 0, dataSize32f));
-			/*checkCudaErrors(cudaMemset(d_Tp, 0, dataSize32fc2));
-			checkCudaErrors(cudaMemset(d_Iu, 0, dataSize32f));
-			checkCudaErrors(cudaMemset(d_Iz, 0, dataSize32f));
-			checkCudaErrors(cudaMemset(d_i1warp, 0, dataSize32f));*/
 
-			//FindWarpingVectorMasked(d_warpUV, pFisheyeMask[level], pTvForward[level], pW[level], pH[level], pS[level], d_tv2);
 			FindWarpingVector(d_warpUV, pTvForward[level], pW[level], pH[level], pS[level], d_tv2);
-
-			//WarpImageMasked(pI1[level], pFisheyeMask[level], pW[level], pH[level], pS[level], d_warpUV, d_i1warp);
 			WarpImage(pI1[level], pW[level], pH[level], pS[level], d_warpUV, d_i1warp);
-			if (level == 0) {
-				DEBUGIMAGE("i0", pI0[level], pH[level], pS[level], false, false);
-				//DEBUGIMAGE("i1", pI1[level], pH[level], pS[level], false, false);
-				DEBUGIMAGE("iwarp", d_i1warp, pH[level], pS[level], false, false);
-			}
-
 
 			ComputeDerivativesFisheyeMasked(pI0[level], d_i1warp, pTvForward[level], pFisheyeMask[level],
 				pW[level], pH[level], pS[level], d_Iu, d_Iz);
-			/*ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvForward[level],
-				pW[level], pH[level], pS[level], d_Iu, d_Iz);*/
 			Clone(d_u_last, pW[level], pH[level], pS[level], d_u);
 
 			float tau = 1.0f;
@@ -458,32 +437,23 @@ int StereoTgv::solveStereoForwardMasked() {
 				UpdateDualVariablesTGVMasked(pFisheyeMask[level], d_u_, d_v_, alpha0, alpha1, sigma, eta_p, eta_q,
 					d_a, d_b, d_c, pW[level], pH[level], pS[level],
 					d_gradv, d_p, d_q);
-				/*UpdateDualVariablesTGV(d_u_, d_v_, alpha0, alpha1, sigma, eta_p, eta_q,
-					d_a, d_b, d_c, pW[level], pH[level], pS[level],
-					d_gradv, d_p, d_q);*/
 
 				// Solve Thresholding
 				SolveTpMasked(pFisheyeMask[level], d_a, d_b, d_c, d_p, pW[level], pH[level], pS[level], d_Tp);
 				//SolveTp(d_a, d_b, d_c, d_p, pW[level], pH[level], pS[level], d_Tp);
 				ThresholdingL1Masked(d_Tp, d_u_, d_Iu, d_Iz, pFisheyeMask[level], lambda, tau, d_etau, d_u, d_us,
 					pW[level], pH[level], pS[level]);
-				/*ThresholdingL1(d_Tp, d_u_, d_Iu, d_Iz, lambda, tau, d_etau, d_u, d_us,
-					pW[level], pH[level], pS[level]);*/
 				Swap(d_u, d_us);
 
 				// Solve Primal Variables
 				UpdatePrimalVariablesMasked(pFisheyeMask[level], d_u_, d_v_, d_p, d_q, d_a, d_b, d_c, tau, d_etav1, d_etav2,
 					alpha0, alpha1, mu, d_u, d_v, d_u_s, d_v_s, pW[level], pH[level], pS[level]);
-				/*UpdatePrimalVariables(d_u_, d_v_, d_p, d_q, d_a, d_b, d_c, tau, d_etav1, d_etav2,
-					alpha0, alpha1, mu, d_u, d_v, d_u_s, d_v_s, pW[level], pH[level], pS[level]);*/
 				Swap(d_u_, d_u_s);
 				Swap(d_v_, d_v_s);
 
 				sigma = sigma / mu;
 				tau = tau * mu;
 			}
-			/*MedianFilterDisparity(d_u, pW[level], pH[level], pS[level], d_us, 5);
-			Swap(d_u, d_us);*/
 
 			// Calculate d_warpUV
 			Subtract(d_u, d_u_last, pW[level], pH[level], pS[level], d_du);
@@ -494,7 +464,6 @@ int StereoTgv::solveStereoForwardMasked() {
 			Add(d_u_last, d_du, pW[level], pH[level], pS[level], d_u);
 			Clone(d_u_, pW[level], pH[level], pS[level], d_u);
 
-			//ComputeOpticalFlowVectorMasked(d_du, d_tv2, pFisheyeMask[level], pW[level], pH[level], pS[level], d_dwarpUV);
 			ComputeOpticalFlowVector(d_du, d_tv2, pW[level], pH[level], pS[level], d_dwarpUV);
 			Add(d_warpUV, d_dwarpUV, pW[level], pH[level], pS[level], d_warpUV);
 		}
@@ -503,16 +472,10 @@ int StereoTgv::solveStereoForwardMasked() {
 		if (level > 0)
 		{
 			float scale = fScale;
-			/*UpscaleMasked(d_u, pFisheyeMask[level], pW[level], pH[level], pS[level], 
-				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_us);*/
 			Upscale(d_u, pW[level], pH[level], pS[level], 
 				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_us);
-			/*UpscaleMasked(d_u_, pFisheyeMask[level], pW[level], pH[level], pS[level], 
-				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_u_s);*/
 			Upscale(d_u_, pW[level], pH[level], pS[level],
 				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_u_s);
-			/*UpscaleMasked(d_warpUV, pFisheyeMask[level], pW[level], pH[level], pS[level], 
-				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_warpUVs);*/
 			Upscale(d_warpUV, pW[level], pH[level], pS[level],
 				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_warpUVs);
 
@@ -522,12 +485,6 @@ int StereoTgv::solveStereoForwardMasked() {
 		}
 		isFirstFrame = false;
 	}
-
-	/*Clone(d_w, width, height, stride, d_wForward);
-
-	if (visualizeResults) {
-		FlowToHSV(d_u, d_v, width, height, stride, d_uvrgb, flowScale);
-	}*/
 
 	return 0;
 }
@@ -545,7 +502,7 @@ int StereoTgv::copyStereoToHost(cv::Mat &wCropped) {
 
 	// Remove Padding
 	//checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_w, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
-	checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_depth, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_depth, dataSize32f, cudaMemcpyDeviceToHost));
 	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
 	wCropped = depth(roi);
 	return 0;
@@ -579,3 +536,184 @@ template<typename T> void StereoTgv::Copy(T &dst, T &src)
 {
 	dst = src;
 }
+
+
+
+
+
+
+
+
+
+
+
+//// Working TGVL1 with masking
+//int StereoTgv::solveStereoForwardMasked() {
+//	// Warp i1 using vector fields
+//	//WarpImageMasked(pI1[0], pFisheyeMask[0], width, height, stride, d_cv, d_i1calibrated);
+//	WarpImage(pI1[0], width, height, stride, d_cv, d_i1calibrated);
+//	Swap(pI1[0], d_i1calibrated);
+//	//DEBUGIMAGE("i1", pI1[0], height, stride, true, false);
+//
+//	checkCudaErrors(cudaMemset(d_u, 0, dataSize32f));
+//	checkCudaErrors(cudaMemset(d_u_, 0, dataSize32f));
+//	checkCudaErrors(cudaMemset(d_warpUV, 0, dataSize32fc2));
+//
+//	// Construct pyramid
+//	for (int level = 1; level < nLevels; level++) {
+//		/*DownscaleMasked(pI0[level - 1], pFisheyeMask[0], pW[level - 1], pH[level - 1], pS[level - 1],
+//			pW[level], pH[level], pS[level], pI0[level]);
+//		DownscaleMasked(pI1[level - 1], pFisheyeMask[0], pW[level - 1], pH[level - 1], pS[level - 1],
+//			pW[level], pH[level], pS[level], pI1[level]);*/
+//		Downscale(pI0[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
+//			pW[level], pH[level], pS[level], pI0[level]);
+//		Downscale(pI1[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
+//			pW[level], pH[level], pS[level], pI1[level]);
+//		//std::cout << pH[level] << " " << pW[level] << " " << pS[level] << std::endl;
+//	}
+//
+//	// Solve stereo
+//	for (int level = nLevels - 1; level >= 0; level--) {
+//		checkCudaErrors(cudaMemset(d_a, 0, dataSize32f));
+//		checkCudaErrors(cudaMemset(d_b, 0, dataSize32f));
+//		checkCudaErrors(cudaMemset(d_c, 0, dataSize32f));
+//		checkCudaErrors(cudaMemset(d_etau, 0, dataSize32f));
+//		checkCudaErrors(cudaMemset(d_etav1, 0, dataSize32f));
+//		checkCudaErrors(cudaMemset(d_etav2, 0, dataSize32f));
+//		checkCudaErrors(cudaMemset(d_i0smooth, 0, dataSize32f));
+//		float eta_p = 3.0f;
+//		float eta_q = 2.0f;
+//
+//		if (level == nLevels - 1) {
+//			//ComputeOpticalFlowVectorMasked(d_u, pTvForward[level], pFisheyeMask[level], pW[level], pH[level], pS[level], d_warpUV);
+//			ComputeOpticalFlowVector(d_u, pTvForward[level], pW[level], pH[level], pS[level], d_warpUV);
+//		}
+//
+//		// Calculate anisotropic diffucion tensor
+//		GaussianMasked(pI0[level], pFisheyeMask[level], pW[level], pH[level], pS[level], d_i0smooth);
+//		//Gaussian(pI0[level], pW[level], pH[level], pS[level], d_i0smooth);
+//		CalcTensorMasked(d_i0smooth, pFisheyeMask[level], beta, gamma, 2, pW[level], pH[level], pS[level], d_a, d_b, d_c);
+//		//CalcTensor(d_i0smooth, beta, gamma, 2, pW[level], pH[level], pS[level], d_a, d_b, d_c);
+//		SolveEtaMasked(pFisheyeMask[level], alpha0, alpha1, d_a, d_b, d_c,
+//			pW[level], pH[level], pS[level], d_etau, d_etav1, d_etav2);
+//		/*SolveEta(alpha0, alpha1, d_a, d_b, d_c,
+//			pW[level], pH[level], pS[level], d_etau, d_etav1, d_etav2);*/
+//
+//		for (int warpIter = 0; warpIter < nWarpIters; warpIter++) {
+//			checkCudaErrors(cudaMemset(d_p, 0, dataSize32fc2));
+//			checkCudaErrors(cudaMemset(d_q, 0, dataSize32fc4));
+//			checkCudaErrors(cudaMemset(d_v, 0, dataSize32fc2));
+//			Clone(d_v_, pW[level], pH[level], pS[level], d_v);
+//			checkCudaErrors(cudaMemset(d_gradv, 0, dataSize32fc4));
+//			checkCudaErrors(cudaMemset(d_du, 0, dataSize32f));
+//			/*checkCudaErrors(cudaMemset(d_Tp, 0, dataSize32fc2));
+//			checkCudaErrors(cudaMemset(d_Iu, 0, dataSize32f));
+//			checkCudaErrors(cudaMemset(d_Iz, 0, dataSize32f));
+//			checkCudaErrors(cudaMemset(d_i1warp, 0, dataSize32f));*/
+//
+//			//FindWarpingVectorMasked(d_warpUV, pFisheyeMask[level], pTvForward[level], pW[level], pH[level], pS[level], d_tv2);
+//			FindWarpingVector(d_warpUV, pTvForward[level], pW[level], pH[level], pS[level], d_tv2);
+//
+//			//WarpImageMasked(pI1[level], pFisheyeMask[level], pW[level], pH[level], pS[level], d_warpUV, d_i1warp);
+//			WarpImage(pI1[level], pW[level], pH[level], pS[level], d_warpUV, d_i1warp);
+//			if (level == level) {
+//				std::cout << "iter: " << pH[level] << " " << pS[level] << std::endl;
+//				DEBUGIMAGE("i0", pI0[level], pH[level], pS[level], false, false);
+//				//DEBUGIMAGE("i1", pI1[level], pH[level], pS[level], false, false);
+//				DEBUGIMAGE("iwarp", d_i1warp, pH[level], pS[level], false, false);
+//				cv::waitKey(1);
+//			}
+//
+//
+//			ComputeDerivativesFisheyeMasked(pI0[level], d_i1warp, pTvForward[level], pFisheyeMask[level],
+//				pW[level], pH[level], pS[level], d_Iu, d_Iz);
+//			/*ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvForward[level],
+//				pW[level], pH[level], pS[level], d_Iu, d_Iz);*/
+//			Clone(d_u_last, pW[level], pH[level], pS[level], d_u);
+//
+//			float tau = 1.0f;
+//			float sigma = 1.0f / tau;
+//
+//			// Inner iteration
+//			for (int iter = 0; iter < nSolverIters; iter++) {
+//				float mu;
+//				if (sigma < 1000.0f) mu = 1.0f / sqrt(1 + 0.7f * tau * timestep_lambda);
+//				else mu = 1;
+//
+//				// Solve Dual Variables
+//				UpdateDualVariablesTGVMasked(pFisheyeMask[level], d_u_, d_v_, alpha0, alpha1, sigma, eta_p, eta_q,
+//					d_a, d_b, d_c, pW[level], pH[level], pS[level],
+//					d_gradv, d_p, d_q);
+//				/*UpdateDualVariablesTGV(d_u_, d_v_, alpha0, alpha1, sigma, eta_p, eta_q,
+//					d_a, d_b, d_c, pW[level], pH[level], pS[level],
+//					d_gradv, d_p, d_q);*/
+//
+//					// Solve Thresholding
+//				SolveTpMasked(pFisheyeMask[level], d_a, d_b, d_c, d_p, pW[level], pH[level], pS[level], d_Tp);
+//				//SolveTp(d_a, d_b, d_c, d_p, pW[level], pH[level], pS[level], d_Tp);
+//				ThresholdingL1Masked(d_Tp, d_u_, d_Iu, d_Iz, pFisheyeMask[level], lambda, tau, d_etau, d_u, d_us,
+//					pW[level], pH[level], pS[level]);
+//				/*ThresholdingL1(d_Tp, d_u_, d_Iu, d_Iz, lambda, tau, d_etau, d_u, d_us,
+//					pW[level], pH[level], pS[level]);*/
+//				Swap(d_u, d_us);
+//
+//				// Solve Primal Variables
+//				UpdatePrimalVariablesMasked(pFisheyeMask[level], d_u_, d_v_, d_p, d_q, d_a, d_b, d_c, tau, d_etav1, d_etav2,
+//					alpha0, alpha1, mu, d_u, d_v, d_u_s, d_v_s, pW[level], pH[level], pS[level]);
+//				/*UpdatePrimalVariables(d_u_, d_v_, d_p, d_q, d_a, d_b, d_c, tau, d_etav1, d_etav2,
+//					alpha0, alpha1, mu, d_u, d_v, d_u_s, d_v_s, pW[level], pH[level], pS[level]);*/
+//				Swap(d_u_, d_u_s);
+//				Swap(d_v_, d_v_s);
+//
+//				sigma = sigma / mu;
+//				tau = tau * mu;
+//			}
+//			/*MedianFilterDisparity(d_u, pW[level], pH[level], pS[level], d_us, 5);
+//			Swap(d_u, d_us);*/
+//
+//			// Calculate d_warpUV
+//			Subtract(d_u, d_u_last, pW[level], pH[level], pS[level], d_du);
+//
+//			// Sanity Check
+//			LimitRange(d_du, 1.0f, pW[level], pH[level], pS[level], d_du);
+//
+//			Add(d_u_last, d_du, pW[level], pH[level], pS[level], d_u);
+//			Clone(d_u_, pW[level], pH[level], pS[level], d_u);
+//
+//			//ComputeOpticalFlowVectorMasked(d_du, d_tv2, pFisheyeMask[level], pW[level], pH[level], pS[level], d_dwarpUV);
+//			ComputeOpticalFlowVector(d_du, d_tv2, pW[level], pH[level], pS[level], d_dwarpUV);
+//			Add(d_warpUV, d_dwarpUV, pW[level], pH[level], pS[level], d_warpUV);
+//		}
+//
+//		// Upscale
+//		if (level > 0)
+//		{
+//			float scale = fScale;
+//			/*UpscaleMasked(d_u, pFisheyeMask[level], pW[level], pH[level], pS[level],
+//				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_us);*/
+//			Upscale(d_u, pW[level], pH[level], pS[level],
+//				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_us);
+//			/*UpscaleMasked(d_u_, pFisheyeMask[level], pW[level], pH[level], pS[level],
+//				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_u_s);*/
+//			Upscale(d_u_, pW[level], pH[level], pS[level],
+//				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_u_s);
+//			/*UpscaleMasked(d_warpUV, pFisheyeMask[level], pW[level], pH[level], pS[level],
+//				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_warpUVs);*/
+//			Upscale(d_warpUV, pW[level], pH[level], pS[level],
+//				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_warpUVs);
+//
+//			Swap(d_u, d_us);
+//			Swap(d_u_, d_u_s);
+//			Swap(d_warpUV, d_warpUVs);
+//		}
+//		isFirstFrame = false;
+//	}
+//
+//	/*Clone(d_w, width, height, stride, d_wForward);
+//
+//	if (visualizeResults) {
+//		FlowToHSV(d_u, d_v, width, height, stride, d_uvrgb, flowScale);
+//	}*/
+//
+//	return 0;
+//}

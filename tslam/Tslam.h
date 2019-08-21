@@ -176,6 +176,8 @@ public:
 	int stereoWidth;
 	int stereoHeight;
 	float stereoScaling;
+	cv::Mat fisheyeMask;
+	cv::Mat fisheyeMask8;
 
 	// Upsampling
 	lup::Upsampling * upsampling;

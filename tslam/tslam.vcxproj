@@ -158,6 +158,7 @@
     <ClInclude Include="Tslam.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="StereoTgv.cpp" />
     <ClCompile Include="Tslam.cpp" />
   </ItemGroup>
   <ItemGroup>
