@@ -8,11 +8,12 @@ int test_IcraAddedAccuratePixels() {
 	int width = 848;
 	int height = 800;
 	float stereoScaling = 1.0f;
-	int nLevel = 5;
-	float fScale = 2.0f;
+	int nLevel = 7;
+	float fScale = 1.5f;
 	int nWarpIters = 50;
-	int nSolverIters = 100;
+	int nSolverIters = 50;
 	float lambda = 3.0f;
+	stereotgv->limitRange = 0.2f;
 
 	int stereoWidth = (int)((float)width / stereoScaling);
 	int stereoHeight = (int)((float)height / stereoScaling);
@@ -83,6 +84,16 @@ int test_IcraAddedAccuratePixels() {
 	stereotgv->copyStereoToHost(depth);
 	depth.copyTo(depthVis, fisheyeMask8);
 	showDepthJet("color", depthVis, 5.0f, false);
+
+	cv::Mat warped;
+	stereotgv->copyWarpedImageToHost(warped);
+	cv::imshow("warped", warped);
+
+	cv::Mat warped8;
+	warped.convertTo(warped8, CV_8U, 256.0);
+	cv::imwrite("resim.png", equi1);
+	cv::imwrite("resiw.png", warped8);
+	saveDepthJet("resdepth.png", depthVis, 5.0f);
 	cv::waitKey();
 	return 0;
 }
@@ -95,6 +106,15 @@ void showDepthJet(std::string windowName, cv::Mat image, float maxDepth, bool sh
 
 	cv::imshow(windowName, u_color);
 	if (shouldWait) cv::waitKey();
+}
+
+void saveDepthJet(std::string fileName, cv::Mat image, float maxDepth) {
+	cv::Mat u_norm, u_gray, u_color;
+	u_norm = image * 256.0f / maxDepth;
+	u_norm.convertTo(u_gray, CV_8UC1);
+	cv::applyColorMap(u_gray, u_color, cv::COLORMAP_JET);
+
+	cv::imwrite(fileName, u_color);
 }
 
 int test_TwoImagesRealsense() {

@@ -3,11 +3,12 @@
 int Tslam::initStereoTGVL1() {
 	stereotgv = new StereoTgv();
 	stereoScaling = 2.0f;
-	float lambda = 5.0f;
+	float lambda = 3.0f;
 	float nLevel = 4;
 	float fScale = 2.0f;
 	int nWarpIters = 20;
 	int nSolverIters = 20;
+	stereotgv->limitRange = 0.2f;
 
 	stereoWidth = (int)(t265.width / stereoScaling);
 	stereoHeight = (int)(t265.height / stereoScaling);
@@ -64,6 +65,7 @@ int Tslam::solveStereoTGVL1() {
 		stereotgv->copyStereoToHost(depth);
 		depth.copyTo(depthVis, fisheyeMask8);
 		showDepthJet("color", depthVis, 5.0f, false);
+		cv::imshow("equi1", halfFisheye1);
 	}
 	else {
 		stereotgv->copyImagesToDevice(equi1, equi2);
@@ -73,6 +75,7 @@ int Tslam::solveStereoTGVL1() {
 		stereotgv->copyStereoToHost(depth);
 		depth.copyTo(depthVis, fisheyeMask8);
 		showDepthJet("color", depthVis, 5.0f, false);
+		cv::imshow("equi1", equi1);
 	}
 
 	return 0;

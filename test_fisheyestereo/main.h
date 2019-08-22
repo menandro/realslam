@@ -37,4 +37,5 @@
 
 int test_IcraAddedAccuratePixels();
 void showDepthJet(std::string windowName, cv::Mat image, float maxDepth, bool shouldWait);
+void saveDepthJet(std::string fileName, cv::Mat image, float maxDepth);
 int test_TwoImagesRealsense();

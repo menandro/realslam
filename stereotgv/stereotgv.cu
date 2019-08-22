@@ -337,7 +337,7 @@ int StereoTgv::solveStereoForward() {
 			Subtract(d_u, d_u_last, pW[level], pH[level], pS[level], d_du);
 
 			// Sanity Check
-			LimitRange(d_du, 1.0f, pW[level], pH[level], pS[level], d_du);
+			LimitRange(d_du, limitRange, pW[level], pH[level], pS[level], d_du);
 
 			Add(d_u_last, d_du, pW[level], pH[level], pS[level], d_u);
 			Clone(d_u_, pW[level], pH[level], pS[level], d_u);
@@ -459,7 +459,7 @@ int StereoTgv::solveStereoForwardMasked() {
 			Subtract(d_u, d_u_last, pW[level], pH[level], pS[level], d_du);
 
 			// Sanity Check
-			LimitRange(d_du, 1.0f, pW[level], pH[level], pS[level], d_du);
+			LimitRange(d_du, limitRange, pW[level], pH[level], pS[level], d_du);
 
 			Add(d_u_last, d_du, pW[level], pH[level], pS[level], d_u);
 			Clone(d_u_, pW[level], pH[level], pS[level], d_u);
@@ -505,6 +505,15 @@ int StereoTgv::copyStereoToHost(cv::Mat &wCropped) {
 	checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_depth, dataSize32f, cudaMemcpyDeviceToHost));
 	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
 	wCropped = depth(roi);
+	return 0;
+}
+
+int StereoTgv::copyWarpedImageToHost(cv::Mat &wCropped) {
+	cv::Mat warpedImage = cv::Mat(cv::Size(stride, height), CV_32F);
+	//checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_w, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy((float *)warpedImage.ptr(), d_i1warp, dataSize32f, cudaMemcpyDeviceToHost));
+	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
+	wCropped = warpedImage(roi);
 	return 0;
 }
 

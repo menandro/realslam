@@ -42,6 +42,7 @@ public:
 	int nLevels;
 	int nSolverIters;
 	int nWarpIters;
+	float limitRange = 1.0f;
 
 	// Inputs and Outputs
 	float *d_i0, *d_i1, *d_i1warp;
@@ -110,6 +111,7 @@ public:
 	int solveStereoForward();
 	int solveStereoForwardMasked();
 	int copyStereoToHost(cv::Mat &wCropped);
+	int copyWarpedImageToHost(cv::Mat &wCropped);
 
 	// UTILITIES
 	int iAlignUp(int n);
