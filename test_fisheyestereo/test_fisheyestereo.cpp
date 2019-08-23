@@ -1,6 +1,7 @@
 #include "main.h"
 
 int test_IcraAddedAccuratePixels() {
+	std::cout << CV_VER_NUM << std::endl;
 	cv::Mat im1 = cv::imread("fs1.png", cv::IMREAD_GRAYSCALE);
 	cv::Mat im2 = cv::imread("fs2.png", cv::IMREAD_GRAYSCALE);
 
