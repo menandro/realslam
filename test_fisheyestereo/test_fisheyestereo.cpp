@@ -3,14 +3,17 @@
 int test_BlenderData() {
 	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
 	std::string folder = "D:/dev/blender/plane";
-	cv::Mat im1 = cv::imread(folder + "/image/left02.png");
-	cv::Mat im2 = cv::imread(folder + "/image/right02.png");
+	std::string outputFilename = "output03.flo";
+	cv::Mat im1 = cv::imread(folder + "/image/left03.png");
+	cv::Mat im2 = cv::imread(folder + "/image/right03.png");
 	int stereoWidth = im1.cols;
 	int stereoHeight = im1.rows;
 	cv::Mat translationVector = cv::readOpticalFlow("D:/dev/matlab_house/translationVectorBlender.flo");
 	cv::Mat calibrationVector = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_32FC2);
 	cv::Mat mask = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_8UC1);
 	circle(mask, cv::Point(stereoWidth / 2, stereoHeight / 2), stereoWidth/2-50, cv::Scalar(256.0f), -1);
+	//cv::imwrite("maskBlender.png", mask);
+	//return 0;
 	/*cv::imshow("mask", mask);
 	std::cout << (int)mask.at<unsigned char>(400, 400) << std::endl;
 	cv::waitKey();*/
@@ -51,7 +54,7 @@ int test_BlenderData() {
 
 	cv::Mat disparity = cv::Mat(stereoHeight, stereoWidth, CV_32FC2);
 	stereotgv->copyDisparityToHost(disparity);
-	cv::writeOpticalFlow("output.flo", disparity);
+	cv::writeOpticalFlow(outputFilename, disparity);
 	// convert disparity to 3D (depends on the model)
 
 	cv::Mat depthVis;
