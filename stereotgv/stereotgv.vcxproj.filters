@@ -63,6 +63,9 @@
     <CudaCompile Include="medianFilter.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
+    <CudaCompile Include="flowToHsv.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stereotgv.h">

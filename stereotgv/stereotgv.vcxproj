@@ -162,6 +162,7 @@
     <CudaCompile Include="conversion.cu" />
     <CudaCompile Include="copyClone.cu" />
     <CudaCompile Include="downscale.cu" />
+    <CudaCompile Include="flowToHsv.cu" />
     <CudaCompile Include="imageConverter.cu" />
     <CudaCompile Include="limitRange.cu" />
     <CudaCompile Include="medianFilter.cu" />

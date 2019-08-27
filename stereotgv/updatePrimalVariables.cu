@@ -155,10 +155,16 @@ void TgvUpdatePrimalVariablesMaskedKernel(float* mask, float* u_, float2* v_, fl
 	int down = ix + (iy + 1) * stride;
 	int left = (ix - 1) + iy * stride;
 	int up = ix + (iy - 1) * stride;
-	float maskRight = mask[right];
-	float maskLeft = mask[left];
-	float maskDown = mask[down];
-	float maskUp = mask[up];
+
+	float maskRight, maskLeft, maskUp, maskDown;
+	if (ix + 1 >= width) maskRight = 0.0f;
+	else maskRight = mask[right];
+	if (ix - 1 < 0) maskLeft = 0.0f;
+	else maskLeft = mask[left];
+	if (iy + 1 >= height) maskDown = 0.0f;
+	else maskDown = mask[down];
+	if (iy - 1 < 0) maskUp = 0.0f;
+	else maskUp = mask[up];
 
 	float4 qc;
 	if (maskRight == 0.0f) {

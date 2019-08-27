@@ -141,21 +141,35 @@ __global__ void TgvThresholdingL1MaskedKernel(float2* Tp, float* u_, float* Iu, 
 	int left = (ix - 1) + iy * stride;
 	int up = ix + (iy - 1) * stride;
 
+	float maskRight, maskLeft, maskUp, maskDown;
+
+	if (ix + 1 >= width) maskRight = 0.0f;
+	else maskRight = mask[right];
+
+	if (ix - 1 < 0) maskLeft = 0.0f;
+	else maskLeft = mask[left];
+
+	if (iy + 1 >= height) maskDown = 0.0f;
+	else maskDown = mask[down];
+
+	if (iy - 1 < 0) maskUp = 0.0f;
+	else maskUp = mask[up];
+
 	//div_p = dxm(Tp(:, : , 1)) + dym(Tp(:, : , 2));
 	float div_p;
 	float dxmTp, dymTp;
 	
 	//if ((ix - 1) >= 0)
-	if ((mask[left] != 0.0f) && (mask[right] != 0.0f))
+	if ((maskLeft != 0.0f) && (maskRight != 0.0f))
 		dxmTp = Tp[pos].x - Tp[left].x;
-	else if (mask[right] == 0.0f)
+	else if (maskRight == 0.0f)
 		dxmTp = -Tp[left].x;
 	else
 		dxmTp = Tp[pos].x;
 
-	if ((mask[up] != 0.0f) && (mask[down] != 0.0f))
+	if ((maskUp != 0.0f) && (maskDown != 0.0f))
 		dymTp = Tp[pos].y - Tp[up].y;
-	else if (mask[down] == 0.0f)
+	else if (maskDown == 0.0f)
 		dymTp = -Tp[up].y;
 	else
 		dymTp = Tp[pos].y;

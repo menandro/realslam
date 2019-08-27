@@ -139,8 +139,16 @@ __global__ void TgvUpdateDualVariablesTGVMaskedKernel(float* mask, float* u_, fl
 	int down = ix + (iy + 1) * stride;
 	int left = (ix - 1) + iy * stride;
 	int up = ix + (iy - 1) * stride;
-	float maskRight = mask[right];
-	float maskDown = mask[down];
+	float maskRight, maskDown;
+	if (ix + 1 >= width) {
+		maskRight = 0.0f;
+	}
+	else maskRight = mask[right];
+	if (iy + 1 >= height) {
+		maskDown = 0.0f;
+	}
+	else maskDown = mask[down];
+
 	float u_pos = u_[pos];
 	float2 v_pos = v_[pos];
 

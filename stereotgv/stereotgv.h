@@ -58,6 +58,8 @@ public:
 	cv::Mat depth;
 	// Warping Variables
 	float2 *d_warpUV, *d_warpUVs, *d_dwarpUV;
+	cv::Mat warpUV, warpUVrgb;
+	float3 *d_uvrgb;
 	//float *d_warpX, *d_warpXs, *d_dwarpX;
 	//float *d_warpY, *d_warpYs, *d_dwarpY;
 
@@ -111,6 +113,8 @@ public:
 	int solveStereoForward();
 	int solveStereoForwardMasked();
 	int copyStereoToHost(cv::Mat &wCropped);
+	int copyDisparityToHost(cv::Mat &wCropped);
+	int copyDisparityVisToHost(cv::Mat &wCropped, float flowScale);
 	int copyWarpedImageToHost(cv::Mat &wCropped);
 
 	// UTILITIES
@@ -120,6 +124,7 @@ public:
 	template<typename T> void Copy(T &dst, T &src);
 
 	// Kernels
+	void FlowToHSV(float2* uv, int w, int h, int s, float3 * uRGB, float flowscale);
 	void MedianFilterDisparity(float *inputu,
 		int w, int h, int s, float *outputu, int kernelsize);
 	void MedianFilter3D(float *X, float *Y, float *Z,

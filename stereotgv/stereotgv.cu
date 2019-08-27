@@ -157,8 +157,11 @@ int StereoTgv::initialize(int width, int height, float beta, float gamma,
 
 	// Debugging
 	checkCudaErrors(cudaMalloc(&debug_depth, dataSize32f));
+	checkCudaErrors(cudaMalloc(&d_uvrgb, dataSize32fc3));
 
 	depth = cv::Mat(height, stride, CV_32F);
+	warpUV = cv::Mat(height, stride, CV_32FC2);
+	warpUVrgb = cv::Mat(height, stride, CV_32FC3);
 
 	return 0;
 }
@@ -408,6 +411,7 @@ int StereoTgv::solveStereoForwardMasked() {
 		CalcTensorMasked(d_i0smooth, pFisheyeMask[level], beta, gamma, 2, pW[level], pH[level], pS[level], d_a, d_b, d_c);
 		SolveEtaMasked(pFisheyeMask[level], alpha0, alpha1, d_a, d_b, d_c,
 			pW[level], pH[level], pS[level], d_etau, d_etav1, d_etav2);
+		//DEBUGIMAGE("mask", pFisheyeMask[level], pH[level], pS[level], false, true);
 
 		for (int warpIter = 0; warpIter < nWarpIters; warpIter++) {
 			checkCudaErrors(cudaMemset(d_p, 0, dataSize32fc2));
@@ -417,11 +421,17 @@ int StereoTgv::solveStereoForwardMasked() {
 			checkCudaErrors(cudaMemset(d_gradv, 0, dataSize32fc4));
 			checkCudaErrors(cudaMemset(d_du, 0, dataSize32f));
 
+			
 			FindWarpingVector(d_warpUV, pTvForward[level], pW[level], pH[level], pS[level], d_tv2);
 			WarpImage(pI1[level], pW[level], pH[level], pS[level], d_warpUV, d_i1warp);
 
-			ComputeDerivativesFisheyeMasked(pI0[level], d_i1warp, pTvForward[level], pFisheyeMask[level],
+			
+			/*ComputeDerivativesFisheyeMasked(pI0[level], d_i1warp, pTvForward[level], pFisheyeMask[level],
+				pW[level], pH[level], pS[level], d_Iu, d_Iz);*/
+			ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvForward[level],
 				pW[level], pH[level], pS[level], d_Iu, d_Iz);
+
+			//DEBUGIMAGE("mask2", pI1[level], pH[level], pS[level], false, true);
 			Clone(d_u_last, pW[level], pH[level], pS[level], d_u);
 
 			float tau = 1.0f;
@@ -505,6 +515,24 @@ int StereoTgv::copyStereoToHost(cv::Mat &wCropped) {
 	checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_depth, dataSize32f, cudaMemcpyDeviceToHost));
 	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
 	wCropped = depth(roi);
+	return 0;
+}
+
+int StereoTgv::copyDisparityToHost(cv::Mat &wCropped) {
+	// Remove Padding
+	//checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_w, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy((float2 *)warpUV.ptr(), d_warpUV, dataSize32fc2, cudaMemcpyDeviceToHost));
+	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
+	wCropped = warpUV(roi);
+	return 0;
+}
+
+int StereoTgv::copyDisparityVisToHost(cv::Mat &wCropped, float flowScale) {
+	// Remove Padding
+	FlowToHSV(d_warpUV, width, height, stride, d_uvrgb, flowScale);
+	checkCudaErrors(cudaMemcpy((float3 *)warpUVrgb.ptr(), d_uvrgb, dataSize32fc3, cudaMemcpyDeviceToHost));
+	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
+	wCropped = warpUVrgb(roi);
 	return 0;
 }
 
