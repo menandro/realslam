@@ -466,6 +466,9 @@ int StereoTgv::solveStereoForwardMasked() {
 			}
 
 			// Calculate d_warpUV
+			MedianFilterDisparity(d_u, pW[level], pH[level], pS[level], d_us, 5);
+			Swap(d_u, d_us);
+
 			Subtract(d_u, d_u_last, pW[level], pH[level], pS[level], d_du);
 
 			// Sanity Check

@@ -2,16 +2,17 @@
 
 int test_FaroData() {
 	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
-	std::string folder = "H:/data_icra/";
-	std::string outputFilename = "outputfaro1.flo";
-	cv::Mat im1 = cv::imread(folder + "image_02/data/im1.png");
-	cv::Mat im2 = cv::imread(folder + "image_03/data/im1.png");
+	std::string folder = "d:/data/data_icra/";
+	std::string filename = "im12";
+	std::string outputFilename = folder + "output/" + filename + ".flo";
+	cv::Mat im1 = cv::imread(folder + "image_02/data/" + filename + ".png");
+	cv::Mat im2 = cv::imread(folder + "image_03/data/" + filename + ".png");
 	int stereoWidth = im1.cols;
 	int stereoHeight = im1.rows;
-	cv::Mat translationVector = cv::readOpticalFlow("D:/dev/matlab_house/translationVectorFaro.flo");
-	cv::Mat calibrationVector = cv::readOpticalFlow("D:/dev/matlab_house/calibrationVectorFaro.flo");
+	cv::Mat translationVector = cv::readOpticalFlow(folder + "translationVector/" + filename + ".flo");
+	cv::Mat calibrationVector = cv::readOpticalFlow(folder + "calibrationVector/" + filename + ".flo");
 	cv::Mat mask = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_8UC1);
-	circle(mask, cv::Point(stereoWidth / 2, stereoHeight / 2), stereoWidth / 2 - 50, cv::Scalar(256.0f), -1);
+	circle(mask, cv::Point(stereoWidth / 2, stereoHeight / 2), stereoWidth / 2 - 10, cv::Scalar(256.0f), -1);
 	//cv::imwrite("maskBlender.png", mask);
 	//return 0;
 	/*cv::imshow("mask", mask);
@@ -24,11 +25,11 @@ int test_FaroData() {
 	int width = 800;
 	int height = 800;
 	float stereoScaling = 1.0f;
-	int nLevel = 14;
+	int nLevel = 16;
 	float fScale = 1.2f;
-	int nWarpIters = 50;
+	int nWarpIters = 100;
 	int nSolverIters = 50;
-	float lambda = 3.0f;
+	float lambda = 5.0;
 	stereotgv->limitRange = 0.1f;
 
 
@@ -61,12 +62,12 @@ int test_FaroData() {
 	cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
 	stereotgv->copyStereoToHost(depth);
 	depth.copyTo(depthVis, mask);
-	showDepthJet("color", depthVis, 5.0f, false);
+	//showDepthJet("color", depthVis, 5.0f, false);
 
 	cv::Mat warped;
 	stereotgv->copyWarpedImageToHost(warped);
 	cv::imshow("left", im1);
-	cv::imshow("right", im2);
+	//cv::imshow("right", im2);
 	cv::imshow("warped", warped);
 	cv::waitKey();
 }
