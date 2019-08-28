@@ -1,5 +1,76 @@
 #include "main.h"
 
+int test_FaroData() {
+	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
+	std::string folder = "H:/data_icra/";
+	std::string outputFilename = "outputfaro1.flo";
+	cv::Mat im1 = cv::imread(folder + "image_02/data/im1.png");
+	cv::Mat im2 = cv::imread(folder + "image_03/data/im1.png");
+	int stereoWidth = im1.cols;
+	int stereoHeight = im1.rows;
+	cv::Mat translationVector = cv::readOpticalFlow("D:/dev/matlab_house/translationVectorFaro.flo");
+	cv::Mat calibrationVector = cv::readOpticalFlow("D:/dev/matlab_house/calibrationVectorFaro.flo");
+	cv::Mat mask = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_8UC1);
+	circle(mask, cv::Point(stereoWidth / 2, stereoHeight / 2), stereoWidth / 2 - 50, cv::Scalar(256.0f), -1);
+	//cv::imwrite("maskBlender.png", mask);
+	//return 0;
+	/*cv::imshow("mask", mask);
+	std::cout << (int)mask.at<unsigned char>(400, 400) << std::endl;
+	cv::waitKey();*/
+	cv::Mat fisheyeMask;
+	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
+
+	StereoTgv * stereotgv = new StereoTgv();
+	int width = 800;
+	int height = 800;
+	float stereoScaling = 1.0f;
+	int nLevel = 14;
+	float fScale = 1.2f;
+	int nWarpIters = 50;
+	int nSolverIters = 50;
+	float lambda = 3.0f;
+	stereotgv->limitRange = 0.1f;
+
+
+	float beta = 4.0f;
+	float gamma = 0.2f;
+	float alpha0 = 5.0f;
+	float alpha1 = 1.0f;
+	float timeStepLambda = 1.0f;
+
+	stereotgv->initialize(stereoWidth, stereoHeight, beta, gamma, alpha0, alpha1,
+		timeStepLambda, lambda, nLevel, fScale, nWarpIters, nSolverIters);
+	stereotgv->visualizeResults = true;
+
+	stereotgv->copyMaskToDevice(fisheyeMask);
+	stereotgv->loadVectorFields(translationVector, calibrationVector);
+	stereotgv->copyImagesToDevice(im1, im2);
+	stereotgv->solveStereoForwardMasked();
+
+
+	cv::Mat disparityVis = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+	stereotgv->copyDisparityVisToHost(disparityVis, 50.0f);
+	cv::imshow("flow", disparityVis);
+
+	cv::Mat disparity = cv::Mat(stereoHeight, stereoWidth, CV_32FC2);
+	stereotgv->copyDisparityToHost(disparity);
+	cv::writeOpticalFlow(outputFilename, disparity);
+	// convert disparity to 3D (depends on the model)
+
+	cv::Mat depthVis;
+	cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+	stereotgv->copyStereoToHost(depth);
+	depth.copyTo(depthVis, mask);
+	showDepthJet("color", depthVis, 5.0f, false);
+
+	cv::Mat warped;
+	stereotgv->copyWarpedImageToHost(warped);
+	cv::imshow("left", im1);
+	cv::imshow("right", im2);
+	cv::imshow("warped", warped);
+	cv::waitKey();
+}
+
 int test_BlenderData() {
 	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
 	std::string folder = "D:/dev/blender/plane";
