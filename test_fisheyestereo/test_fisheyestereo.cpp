@@ -2,8 +2,8 @@
 
 int test_FaroData() {
 	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
-	std::string folder = "d:/data/data_icra/";
-	std::string filename = "im12";
+	std::string folder = "h:/data_icra/";
+	std::string filename = "im73";
 	std::string outputFilename = folder + "output/" + filename + ".flo";
 	cv::Mat im1 = cv::imread(folder + "image_02/data/" + filename + ".png");
 	cv::Mat im2 = cv::imread(folder + "image_03/data/" + filename + ".png");
@@ -25,9 +25,9 @@ int test_FaroData() {
 	int width = 800;
 	int height = 800;
 	float stereoScaling = 1.0f;
-	int nLevel = 16;
+	int nLevel = 14;
 	float fScale = 1.2f;
-	int nWarpIters = 100;
+	int nWarpIters = 50;
 	int nSolverIters = 50;
 	float lambda = 5.0;
 	stereotgv->limitRange = 0.1f;
