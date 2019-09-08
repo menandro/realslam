@@ -2,6 +2,7 @@
 
 #include <opencv2/opencv.hpp>
 #include <stereotgv/stereotgv.h>
+#include <time.h>
 
 #if _WIN64
 #define LIB_PATH "D:/dev/lib64/"
@@ -35,6 +36,8 @@
 #pragma comment(lib, LIB_PATH "opencv_cudaimgproc" CV_VER_NUM LIB_EXT)
 #pragma comment(lib, LIB_PATH "opencv_video" CV_VER_NUM LIB_EXT)
 
+int test_Timing(int warpIteration);
+int test_LimitingRange();
 int test_FaroData();
 int test_BlenderData();
 int test_IcraAddedAccuratePixels();

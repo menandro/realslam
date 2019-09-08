@@ -1,12 +1,159 @@
 #include "main.h"
 
+int test_Timing(int warpIteration) {
+	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
+	std::string folder = "D:/dev/blender/icra2020";
+	std::string outputFilename = folder + "/output/timing06_" + std::to_string(warpIteration) + ".flo";
+	cv::Mat im1 = cv::imread(folder + "/image/left06.png");
+	cv::Mat im2 = cv::imread(folder + "/image/right06.png");
+	int stereoWidth = im1.cols;
+	int stereoHeight = im1.rows;
+	cv::Mat translationVector = cv::readOpticalFlow("D:/dev/matlab_house/translationVectorBlender.flo");
+	cv::Mat calibrationVector = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_32FC2);
+	cv::Mat mask = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_8UC1);
+	circle(mask, cv::Point(stereoWidth / 2, stereoHeight / 2), stereoWidth / 2 - 50, cv::Scalar(256.0f), -1);
+	//cv::imwrite("maskBlender.png", mask);
+	//return 0;
+	/*cv::imshow("mask", mask);
+	std::cout << (int)mask.at<unsigned char>(400, 400) << std::endl;
+	cv::waitKey();*/
+	cv::Mat fisheyeMask;
+	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
+
+	StereoTgv * stereotgv = new StereoTgv();
+	int width = 800;
+	int height = 800;
+	float stereoScaling = 1.0f;
+	int nLevel = 5;
+	float fScale = 2.0;
+	int nWarpIters = warpIteration;
+	int nSolverIters = 10;
+	float lambda = 5.0;
+	stereotgv->limitRange = 0.2f;
+
+
+	float beta = 9.0f;
+	float gamma = 0.85f;
+	float alpha0 = 17.0f;
+	float alpha1 = 1.2f;
+	float timeStepLambda = 1.0f;
+
+	stereotgv->initialize(stereoWidth, stereoHeight, beta, gamma, alpha0, alpha1,
+		timeStepLambda, lambda, nLevel, fScale, nWarpIters, nSolverIters);
+	stereotgv->visualizeResults = true;
+
+	stereotgv->copyMaskToDevice(fisheyeMask);
+	stereotgv->loadVectorFields(translationVector, calibrationVector);
+	stereotgv->copyImagesToDevice(im1, im2);
+	clock_t start = clock();
+	stereotgv->solveStereoForwardMasked();
+	cv::Mat disparityVis = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+	//stereotgv->copyDisparityVisToHost(disparityVis, 50.0f);
+	//cv::imshow("flow", disparityVis);
+	cv::Mat disparity = cv::Mat(stereoHeight, stereoWidth, CV_32FC2);
+	stereotgv->copyDisparityToHost(disparity);
+	clock_t timeElapsed = (clock() - start);
+	std::cout << "time: " << timeElapsed << " ms" << std::endl;
+	cv::writeOpticalFlow(outputFilename, disparity);
+	// convert disparity to 3D (depends on the model)
+
+	cv::Mat depthVis;
+	cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+	stereotgv->copyStereoToHost(depth);
+	depth.copyTo(depthVis, mask);
+	//showDepthJet("color", depthVis, 5.0f, false);
+
+	cv::Mat warped;
+	stereotgv->copyWarpedImageToHost(warped);
+	//cv::imshow("left", im1);
+	//cv::imshow("right", im2);
+	//cv::imshow("warped", warped);
+	//cv::waitKey();
+}
+
+int test_LimitingRange() {
+	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
+	std::string folder = "D:/dev/blender/icra2020";
+	std::string outputFilename = folder + "/output/timing06.flo";
+	cv::Mat im1 = cv::imread(folder + "/image/left06.png");
+	cv::Mat im2 = cv::imread(folder + "/image/right06.png");
+	int stereoWidth = im1.cols;
+	int stereoHeight = im1.rows;
+	cv::Mat translationVector = cv::readOpticalFlow("D:/dev/matlab_house/translationVectorBlender.flo");
+	cv::Mat calibrationVector = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_32FC2);
+	cv::Mat mask = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_8UC1);
+	circle(mask, cv::Point(stereoWidth / 2, stereoHeight / 2), stereoWidth / 2 - 50, cv::Scalar(256.0f), -1);
+	//cv::imwrite("maskBlender.png", mask);
+	//return 0;
+	/*cv::imshow("mask", mask);
+	std::cout << (int)mask.at<unsigned char>(400, 400) << std::endl;
+	cv::waitKey();*/
+	cv::Mat fisheyeMask;
+	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
+
+	StereoTgv * stereotgv = new StereoTgv();
+	int width = 800;
+	int height = 800;
+	float stereoScaling = 1.0f;
+	int nLevel = 5;
+	float fScale = 2.0;
+	int nWarpIters = 1;
+	int nSolverIters = 10;
+	float lambda = 5.0;
+	stereotgv->limitRange = 0.2f;
+
+
+	float beta = 9.0f;
+	float gamma = 0.85f;
+	float alpha0 = 17.0f;
+	float alpha1 = 1.2f;
+	float timeStepLambda = 1.0f;
+
+	stereotgv->initialize(stereoWidth, stereoHeight, beta, gamma, alpha0, alpha1,
+		timeStepLambda, lambda, nLevel, fScale, nWarpIters, nSolverIters);
+	stereotgv->visualizeResults = true;
+
+	stereotgv->copyMaskToDevice(fisheyeMask);
+	stereotgv->loadVectorFields(translationVector, calibrationVector);
+	stereotgv->copyImagesToDevice(im1, im2);
+	clock_t start = clock();
+	stereotgv->solveStereoForwardMasked();
+	cv::Mat disparityVis = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+	//stereotgv->copyDisparityVisToHost(disparityVis, 50.0f);
+	//cv::imshow("flow", disparityVis);
+	cv::Mat disparity = cv::Mat(stereoHeight, stereoWidth, CV_32FC2);
+	stereotgv->copyDisparityToHost(disparity);
+	clock_t timeElapsed = (clock() - start);
+	std::cout << "time: " << timeElapsed << " ms" << std::endl;
+	cv::writeOpticalFlow(outputFilename, disparity);
+	// convert disparity to 3D (depends on the model)
+
+	cv::Mat depthVis;
+	cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+	stereotgv->copyStereoToHost(depth);
+	depth.copyTo(depthVis, mask);
+	showDepthJet("color", depthVis, 5.0f, false);
+
+	cv::Mat warped;
+	stereotgv->copyWarpedImageToHost(warped);
+	cv::imshow("left", im1);
+	cv::imshow("right", im2);
+	cv::imshow("warped", warped);
+	cv::waitKey();
+}
+
 int test_FaroData() {
 	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
-	std::string folder = "h:/data_icra/";
-	std::string filename = "im73";
+	std::string folder = "d:/data/data_icra/";
+	std::string filename = "im92";
 	std::string outputFilename = folder + "output/" + filename + ".flo";
 	cv::Mat im1 = cv::imread(folder + "image_02/data/" + filename + ".png");
 	cv::Mat im2 = cv::imread(folder + "image_03/data/" + filename + ".png");
+	cv::Mat equi1, equi2;
+	cv::cvtColor(im1, im1, cv::COLOR_BGR2GRAY);
+	cv::cvtColor(im2, im2, cv::COLOR_BGR2GRAY);
+	cv::equalizeHist(im1, equi1);
+	cv::equalizeHist(im2, equi2);
 	int stereoWidth = im1.cols;
 	int stereoHeight = im1.rows;
 	cv::Mat translationVector = cv::readOpticalFlow(folder + "translationVector/" + filename + ".flo");
@@ -25,18 +172,18 @@ int test_FaroData() {
 	int width = 800;
 	int height = 800;
 	float stereoScaling = 1.0f;
-	int nLevel = 14;
+	int nLevel = 11;
 	float fScale = 1.2f;
 	int nWarpIters = 50;
 	int nSolverIters = 50;
-	float lambda = 5.0;
+	float lambda = 5.0f;
 	stereotgv->limitRange = 0.1f;
 
 
-	float beta = 4.0f;
-	float gamma = 0.2f;
-	float alpha0 = 5.0f;
-	float alpha1 = 1.0f;
+	float beta = 9.0f;//4.0f;
+	float gamma = 0.85f;// 0.2f;
+	float alpha0 = 17.0f;// 5.0f;
+	float alpha1 = 1.2f;// 1.0f;
 	float timeStepLambda = 1.0f;
 
 	stereotgv->initialize(stereoWidth, stereoHeight, beta, gamma, alpha0, alpha1,
@@ -45,7 +192,8 @@ int test_FaroData() {
 
 	stereotgv->copyMaskToDevice(fisheyeMask);
 	stereotgv->loadVectorFields(translationVector, calibrationVector);
-	stereotgv->copyImagesToDevice(im1, im2);
+
+	stereotgv->copyImagesToDevice(equi1, equi2);
 	stereotgv->solveStereoForwardMasked();
 
 
@@ -66,21 +214,22 @@ int test_FaroData() {
 
 	cv::Mat warped;
 	stereotgv->copyWarpedImageToHost(warped);
-	cv::imshow("left", im1);
-	//cv::imshow("right", im2);
+	cv::imshow("right", equi2);
+	cv::imshow("left", equi1);
 	cv::imshow("warped", warped);
 	cv::waitKey();
 }
 
 int test_BlenderData() {
 	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
-	std::string folder = "D:/dev/blender/plane";
-	std::string outputFilename = "output03.flo";
-	cv::Mat im1 = cv::imread(folder + "/image/left03.png");
-	cv::Mat im2 = cv::imread(folder + "/image/right03.png");
+	std::string folder = "D:/dev/blender/icra2020";
+	std::string outputFilename = folder + "/output/output11.flo";
+	cv::Mat im1 = cv::imread(folder + "/image/left11.png");
+	cv::Mat im2 = cv::imread(folder + "/image/right11.png");
+	cv::Mat translationVector = cv::readOpticalFlow(folder + "/translationVectorBlender.flo");
 	int stereoWidth = im1.cols;
 	int stereoHeight = im1.rows;
-	cv::Mat translationVector = cv::readOpticalFlow("D:/dev/matlab_house/translationVectorBlender.flo");
+	
 	cv::Mat calibrationVector = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_32FC2);
 	cv::Mat mask = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_8UC1);
 	circle(mask, cv::Point(stereoWidth / 2, stereoHeight / 2), stereoWidth/2-50, cv::Scalar(256.0f), -1);
@@ -96,18 +245,18 @@ int test_BlenderData() {
 	int width = 800;
 	int height = 800;
 	float stereoScaling = 1.0f;
-	int nLevel = 14;
+	int nLevel = 6; // 11 in paper
 	float fScale = 1.2f;
 	int nWarpIters = 50;
 	int nSolverIters = 50;
-	float lambda = 3.0f;
+	float lambda = 5.0f;
 	stereotgv->limitRange = 0.1f;
 
 
-	float beta = 4.0f;
-	float gamma = 0.2f;
-	float alpha0 = 5.0f;
-	float alpha1 = 1.0f;
+	float beta = 9.0f;
+	float gamma = 0.85f;
+	float alpha0 = 17.0f;
+	float alpha1 = 1.2f;
 	float timeStepLambda = 1.0f;
 	
 	stereotgv->initialize(stereoWidth, stereoHeight, beta, gamma, alpha0, alpha1,

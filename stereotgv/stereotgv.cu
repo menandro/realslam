@@ -83,7 +83,7 @@ int StereoTgv::initialize(int width, int height, float beta, float gamma,
 		checkCudaErrors(cudaMalloc(&pTvBackward[level], 2 * pDataSize[level]));
 		checkCudaErrors(cudaMalloc(&pFisheyeMask[level], pDataSize[level]));
 
-		std::cout << newHeight << " " << newWidth << " " << newStride << std::endl;
+		//std::cout << newHeight << " " << newWidth << " " << newStride << std::endl;
 
 		pW[level] = newWidth;
 		pH[level] = newHeight;
@@ -94,7 +94,7 @@ int StereoTgv::initialize(int width, int height, float beta, float gamma,
 		
 	}
 
-	std::cout << stride << " " << height << std::endl;
+	//std::cout << stride << " " << height << std::endl;
 	dataSize8u = stride * height * sizeof(uchar);
 	dataSize8uc3 = stride * height * sizeof(uchar3);
 	dataSize32f = stride * height * sizeof(float);
@@ -184,7 +184,7 @@ int StereoTgv::loadVectorFields(cv::Mat translationVector, cv::Mat calibrationVe
 	ScalarMultiply(d_tvForward, -1.0f, width, height, stride, d_tvBackward);
 	pTvBackward[0] = d_tvBackward;
 	for (int level = 1; level < nLevels; level++) {
-		std::cout << "vectorfields " << pW[level] << " " << pH[level] << " " << pS[level] << std::endl;
+		//std::cout << "vectorfields " << pW[level] << " " << pH[level] << " " << pS[level] << std::endl;
 		Downscale(pTvForward[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
 			pW[level], pH[level], pS[level], pTvForward[level]);
 		Downscale(pTvBackward[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
