@@ -10,6 +10,10 @@ __global__ void TgvConvertDisparityToDepthKernel(float *disparity, float baselin
 
 	if (ix >= width || iy >= height) return;
 
+	/*float Z = baseline * focal / disparity[pos];
+	float X = (ix - width / 2)*Z / focal;
+	float Y = (iy - height / 2)*Z / focal;
+	depth[pos] = sqrt(Z * Z + X * X + Y * Y);*/
 	depth[pos] = baseline * focal / disparity[pos];
 }
 

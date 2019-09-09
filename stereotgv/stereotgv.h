@@ -113,6 +113,7 @@ public:
 	int solveStereoForward();
 	int solveStereoForwardMasked();
 	int copyStereoToHost(cv::Mat &wCropped);
+	int copy1DDisparityToHost(cv::Mat &wCropped);
 	int copyDisparityToHost(cv::Mat &wCropped);
 	int copyDisparityVisToHost(cv::Mat &wCropped, float flowScale);
 	int copyWarpedImageToHost(cv::Mat &wCropped);

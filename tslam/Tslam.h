@@ -229,4 +229,5 @@ public:
 
 	void testStereo(std::string im1, std::string im2);
 	void showDepthJet(std::string windowName, cv::Mat image, float maxDepth, bool shouldWait);
+	int saveT265Images(const char* filename, std::string folderOutput);
 };

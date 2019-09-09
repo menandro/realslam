@@ -36,6 +36,7 @@
 #pragma comment(lib, LIB_PATH "opencv_cudaimgproc" CV_VER_NUM LIB_EXT)
 #pragma comment(lib, LIB_PATH "opencv_video" CV_VER_NUM LIB_EXT)
 
+int test_ImageSequence();
 int test_Timing(int warpIteration);
 int test_LimitingRange();
 int test_FaroData();

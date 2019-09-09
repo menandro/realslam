@@ -760,6 +760,63 @@ void Tslam::testStereo(std::string im1fn, std::string im2fn) {
 	cv::waitKey();
 }
 
+int Tslam::saveT265Images(const char* filename, std::string folderOutput) {
+	try {
+		rs2::pipeline pipe;
+		rs2::config cfg;
+
+		cfg.enable_device_from_file(filename, false);
+		cfg.enable_stream(RS2_STREAM_FISHEYE, 1, 848, 800, rs2_format::RS2_FORMAT_Y8, 30);
+		cfg.enable_stream(RS2_STREAM_FISHEYE, 2, 848, 800, rs2_format::RS2_FORMAT_Y8, 30);
+
+		rs2::pipeline_profile profiles = pipe.start(cfg);
+		rs2::device device = profiles.get_device();
+		auto playback = device.as<rs2::playback>();
+		//playback.set_playback_speed(0.1);
+		playback.set_real_time(false);
+
+		cv::Mat im = cv::Mat::zeros(100, 400, CV_8UC3);
+		cv::putText(im, "Saving fisheye images.", cv::Point(0, 30), cv::FONT_HERSHEY_PLAIN, 2, CV_RGB(255, 255, 255));
+		cv::imshow("Main", im);
+
+		int ir1Cnt = 0;
+		int ir2Cnt = 0;
+		while (true)
+		{
+			char pressed = cv::waitKey(10);
+			if (pressed == 27) break;
+			rs2::frameset frameset;
+			cv::Mat fisheye1, fisheye2;
+			if (pipe.poll_for_frames(&frameset)) {
+				auto fisheye1Data = frameset.get_fisheye_frame(1);
+				auto fisheye2Data = frameset.get_fisheye_frame(2);
+
+				fisheye1 = cv::Mat(cv::Size(848, 800), CV_8UC1, (void*)fisheye1Data.get_data(), cv::Mat::AUTO_STEP);
+				fisheye2 = cv::Mat(cv::Size(848, 800), CV_8UC1, (void*)fisheye2Data.get_data(), cv::Mat::AUTO_STEP);
+
+				cv::imwrite(folderOutput + "colored_0/data/im" + std::to_string(ir1Cnt) + ".png", fisheye1);
+				ir1Cnt++;
+				cv::imshow("ir1", fisheye1);
+				cv::imwrite(folderOutput + "colored_1/data/im" + std::to_string(ir2Cnt) + ".png", fisheye2);
+				ir2Cnt++;
+				cv::imshow("ir2", fisheye1);
+			}
+		}
+		pipe.stop();
+	}
+	catch (const rs2::error & e)
+	{
+		std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << e.what() << std::endl;
+		return EXIT_FAILURE;
+	}
+	return 0;
+}
+
 
 
 

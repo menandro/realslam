@@ -521,6 +521,15 @@ int StereoTgv::copyStereoToHost(cv::Mat &wCropped) {
 	return 0;
 }
 
+int StereoTgv::copy1DDisparityToHost(cv::Mat &wCropped) {
+	// Remove Padding
+	//checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_w, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_u, dataSize32f, cudaMemcpyDeviceToHost));
+	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
+	wCropped = depth(roi);
+	return 0;
+}
+
 int StereoTgv::copyDisparityToHost(cv::Mat &wCropped) {
 	// Remove Padding
 	//checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_w, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
