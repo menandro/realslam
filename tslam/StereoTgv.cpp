@@ -3,7 +3,7 @@
 int Tslam::initStereoTGVL1() {
 	stereotgv = new StereoTgv();
 	stereoScaling = 2.0f;
-	float lambda = 3.0f;
+	float lambda = 5.0f;
 	float nLevel = 4;
 	float fScale = 2.0f;
 	int nWarpIters = 20;
@@ -26,8 +26,8 @@ int Tslam::initStereoTGVL1() {
 
 	float beta = 4.0f;
 	float gamma = 0.2f;
-	float alpha0 = 5.0f;
-	float alpha1 = 1.0f;
+	float alpha0 = 17.0f; // 5.0f;
+	float alpha1 = 1.2f;//  1.0f;
 	float timeStepLambda = 1.0f;
 	
 	stereotgv->initialize(stereoWidth, stereoHeight, beta, gamma, alpha0, alpha1,
@@ -58,13 +58,18 @@ int Tslam::solveStereoTGVL1() {
 		cv::Mat halfFisheye1, halfFisheye2;
 		cv::resize(equi1, halfFisheye1, cv::Size(stereoWidth, stereoHeight));
 		cv::resize(equi2, halfFisheye2, cv::Size(stereoWidth, stereoHeight));
+
+		clock_t start = clock();
 		stereotgv->copyImagesToDevice(halfFisheye1, halfFisheye2);
 		stereotgv->solveStereoForwardMasked();
 		cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
 		cv::Mat depthVis;
 		stereotgv->copyStereoToHost(depth);
+		clock_t timeElapsed = (clock() - start);
+		//std::cout << "time: " << timeElapsed << " ms" << std::endl;
+
 		depth.copyTo(depthVis, fisheyeMask8);
-		showDepthJet("color", depthVis, 5.0f, false);
+		showDepthJet("color", depthVis, std::to_string(timeElapsed), 5.0f, false);
 		cv::imshow("equi1", halfFisheye1);
 	}
 	else {

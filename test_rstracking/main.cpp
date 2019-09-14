@@ -9,7 +9,7 @@ int main() {
 
 	// Save images from recorded t265
 	Tslam *tslam = new Tslam();
-	tslam->saveT265Images("h:/data_rs_iis/20190909/bag/20190909_195242.bag", "h:/data_rs_iis/20190909/");
+	tslam->saveT265Images("h:/data_rs_iis/20190913_11/bag/20190913_103425.bag", "h:/data_rs_iis/20190913_11/");
 
 	/*double scale = 2.0;
 	cv::Mat mask = cv::Mat::zeros(cv::Size(848 / scale, 800/scale), CV_8UC1);

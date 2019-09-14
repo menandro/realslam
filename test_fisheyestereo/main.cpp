@@ -3,7 +3,7 @@
 int main(void) {
 	//test_LimitingRangeOne();
 	//test_BlenderDataSequence();
-	test_ImageSequence();
+	//test_ImageSequence();
 	/*for (int k = 1; k <= 20; k++) {
 		test_Timing(k);
 	}*/
@@ -11,6 +11,6 @@ int main(void) {
 	//test_FaroData();
 	//test_BlenderData();
 	//test_IcraAddedAccuratePixels();
-	//test_TwoImagesRealsense();
+	test_TwoImagesRealsense();
 	return 0;
 }

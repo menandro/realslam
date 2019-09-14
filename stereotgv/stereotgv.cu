@@ -421,11 +421,9 @@ int StereoTgv::solveStereoForwardMasked() {
 			checkCudaErrors(cudaMemset(d_gradv, 0, dataSize32fc4));
 			checkCudaErrors(cudaMemset(d_du, 0, dataSize32f));
 
-			
 			FindWarpingVector(d_warpUV, pTvForward[level], pW[level], pH[level], pS[level], d_tv2);
 			WarpImage(pI1[level], pW[level], pH[level], pS[level], d_warpUV, d_i1warp);
 
-			
 			/*ComputeDerivativesFisheyeMasked(pI0[level], d_i1warp, pTvForward[level], pFisheyeMask[level],
 				pW[level], pH[level], pS[level], d_Iu, d_Iz);*/
 			ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvForward[level],
@@ -471,7 +469,7 @@ int StereoTgv::solveStereoForwardMasked() {
 
 			Subtract(d_u, d_u_last, pW[level], pH[level], pS[level], d_du);
 
-			// Sanity Check
+			// Sanity Check (ICRA2020)
 			LimitRange(d_du, limitRange, pW[level], pH[level], pS[level], d_du);
 
 			Add(d_u_last, d_du, pW[level], pH[level], pS[level], d_u);

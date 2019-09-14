@@ -739,6 +739,16 @@ void Tslam::showDepthJet(std::string windowName, cv::Mat image, float maxDepth, 
 	if (shouldWait) cv::waitKey();
 }
 
+void Tslam::showDepthJet(std::string windowName, cv::Mat image, std::string message, float maxDepth, bool shouldWait = true) {
+	cv::Mat u_norm, u_gray, u_color;
+	u_norm = image * 256.0f / maxDepth;
+	u_norm.convertTo(u_gray, CV_8UC1);
+	cv::applyColorMap(u_gray, u_color, cv::COLORMAP_JET);
+	cv::putText(u_color, message, cv::Point(10, 12), cv::FONT_HERSHEY_PLAIN, 1, CV_RGB(255, 255, 255));
+	cv::imshow(windowName, u_color);
+	if (shouldWait) cv::waitKey();
+}
+
 void Tslam::testStereo(std::string im1fn, std::string im2fn) {
 	cv::Mat im1 = cv::imread(im1fn);
 	cv::Mat im2 = cv::imread(im2fn);
