@@ -2,6 +2,7 @@
 
 #include <opencv2/opencv.hpp>
 #include <stereotgv/stereotgv.h>
+#include <stereolite/stereolite.h>
 #include <time.h>
 
 #if _WIN64
@@ -36,9 +37,13 @@
 #pragma comment(lib, LIB_PATH "opencv_cudaimgproc" CV_VER_NUM LIB_EXT)
 #pragma comment(lib, LIB_PATH "opencv_video" CV_VER_NUM LIB_EXT)
 
+int test_PlaneSweep();
+int test_StereoLiteTwoFrames(int nLevel, float fScale, int nWarpIters, int nSolverIters);
+int test_TwoFrames(int nLevel, float fScale, int nWarpIters, int nSolverIters);
 int test_LimitingRangeOne();
 int test_BlenderDataSequence();
 int test_ImageSequence();
+int test_ImageSequenceLite();
 int test_Timing(int warpIteration);
 int test_LimitingRange();
 int test_FaroData();

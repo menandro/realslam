@@ -45,6 +45,7 @@ public:
 	float limitRange = 1.0f;
 
 	// Inputs and Outputs
+	cv::Mat im0pad, im1pad;
 	float *d_i0, *d_i1, *d_i1warp;
 	uchar3 *d_i08uc3, *d_i18uc3;
 	uchar *d_i08u, *d_i18u;
@@ -100,8 +101,6 @@ public:
 
 	// Debug
 	float *debug_depth;
-
-	cv::Mat im0pad, im1pad;
 
 
 	int initialize(int width, int height, float beta, float gamma,
