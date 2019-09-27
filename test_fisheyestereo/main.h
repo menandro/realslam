@@ -37,6 +37,8 @@
 #pragma comment(lib, LIB_PATH "opencv_cudaimgproc" CV_VER_NUM LIB_EXT)
 #pragma comment(lib, LIB_PATH "opencv_video" CV_VER_NUM LIB_EXT)
 
+int test_PlaneSweepWithTvl1();
+int test_ImageSequencePlanesweep();
 int test_PlaneSweep();
 int test_StereoLiteTwoFrames(int nLevel, float fScale, int nWarpIters, int nSolverIters);
 int test_TwoFrames(int nLevel, float fScale, int nWarpIters, int nSolverIters);

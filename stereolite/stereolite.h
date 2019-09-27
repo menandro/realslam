@@ -68,6 +68,7 @@ public:
 	std::vector<int> pH;
 	std::vector<int> pS;
 	std::vector<int> pDataSize;
+	std::vector<float*> pSparsePrior;
 	cv::Mat fisheyeMaskPad;
 	float* d_fisheyeMask;
 	std::vector<float*> pFisheyeMask;
@@ -98,6 +99,8 @@ public:
 	int copyStereoToHost(cv::Mat &wCropped);
 	int copyPlanesweepForwardToHost(cv::Mat &wCropped);
 	int copyPlanesweepBackwardToHost(cv::Mat &wCropped);
+	int copyPlanesweepFinalToHost(cv::Mat &wCropped);
+	int copyPropagatedDisparityToHost(cv::Mat &wCropped);
 
 	// Planesweep
 	int planeSweepForward();
@@ -110,11 +113,29 @@ public:
 	float * ps_disparityForward;
 	float * ps_disparityBackward;
 	float * ps_disparityFinal;
+	float2 * ps_currentWarpForward; // Holds warping vector for every step
+	float2 * ps_warpForward; // Holds warping vector of max correlation
+	float2 * ps_finalWarpForward; // Holds warping vector with left-right consistency
+	float* ps_grad;
+	float* ps_propagatedDisparity;
+	float2* ps_propagatedWarpForward;
 	int planeSweepMaxDisparity;
 	int planeSweepWindow;
 	float planeSweepMaxError;
 	int planeSweepStride;
+	float planeSweepEpsilon = 1.0f;
 	cv::Mat planeSweepDepth;
+	int maxPropIter = 1;
+	float* d_lambdaMask;
+	float l2lambda = 0.5f;
+	int l2iter = 100;
+
+	// Planesweep with TVL1
+	int planeSweepWithPropagation(int upsamplingRadius);
+	int planeSweepPropagationL1Refinement(int upsamplingRadius);
+	int planeSweepL1upsamplingAndRefinement();
+	int planeSweepL2upsamplingL1Refinement();
+	int planeSweepPyramidL1Refinement();
 
 	// UTILITIES
 	int iAlignUp(int n);
@@ -124,13 +145,26 @@ public:
 
 	// Kernels
 	// Planesweep
+	void LeftRightConsistency(float *disparityForward, float* disparityBackward, float2* warpingVector,
+		float epsilon, float* disparityFinal, float2* finalWarpForward, int w, int h, int s);
+	void PlaneSweepCorrelationGetWarp(float *i0, float *i1, float* disparity, int sweepDistance, int windowSize,
+		float2* currentWarp, float2* finalWarp, float2 * translationVector, int w, int h, int s, float *error);
 	void PlaneSweepCorrelation(float *i0, float *i1, float* disparity, int sweepDistance, int windowSize,
 		int w, int h, int s, float *error);
 	void SetValue(float *image, float value, int w, int h, int s);
+	void PropagateColorOnly(float* grad, float* lidar, float2* warpUV, float2* warpUVOut, float* depthOut, int radius);
+	void Gradient(float* input, float* output);
+	void GetMask(float* input, float* output, bool isPositive, int w, int h, int s);
 
 	// TVL1
 	void ThresholdingL1Masked(float* mask, float* u, float* u_, float* Iu, float* Iz, float lambda, float theta,
 		float* us, int w, int h, int s);
+	void ThresholdingL1LambdaMasked(float* mask, float* u, float* u_, float* Iu, float* Iz, float lambda, float* lambdaMask, float theta,
+		float* us, int w, int h, int s);
+	void SimpleL2(float* mask, float* u, float* u_, float l2lambda, float* lambdaMask,
+		float* us, int w, int h, int s);
+	void SparsePriorL1(float* fisheyeMask, float* u, float* u_, float * usparse, float* Iu, float* Iz,
+		float lambda, float l2lambda, float* lambdaMask, float theta, float* us, int w, int h, int s);
 	void SolveProblem1bMasked(float* mask, float* u, float2 *p, float theta,
 		float* us, int w, int h, int s);
 	void SolveProblem2Masked(float* mask, float* u, float2 *p, float theta, float tau,
@@ -162,6 +196,8 @@ public:
 		int newWidth, int newHeight, int newStride, float *out);
 	void DownscaleNearestNeighbor(const float *src, int width, int height, int stride,
 		int newWidth, int newHeight, int newStride, float *out);
+	void DownscaleNearestNeighbor(const float *src, int width, int height, int stride,
+		int newWidth, int newHeight, int newStride, float scale, float *out);
 	void Downscale(const float2 *src, int width, int height, int stride,
 		int newWidth, int newHeight, int newStride, float2 *out);
 	void Downscale(const float *src, int width, int height, int stride,

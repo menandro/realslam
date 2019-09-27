@@ -49,6 +49,150 @@ void StereoLite::ThresholdingL1Masked(float* mask, float* u, float* u_, float* I
 		w, h, s, us);
 }
 
+
+__global__ void LiteThresholdingL1LambdaMaskedKernel(float* mask, float* u, float* u_, float* Iu, float* Iz, float lambda, float* lambdaMask, float theta,
+	int width, int height, int stride, float* us)
+{
+	int iy = blockIdx.y * blockDim.y + threadIdx.y;        // current row 
+	int ix = blockIdx.x * blockDim.x + threadIdx.x;        // current column 
+
+	if ((iy >= height) && (ix >= width)) return;
+	int pos = ix + iy * stride;
+	if (mask[pos] == 0.0f) return;
+
+	if (lambdaMask[pos] == 0.0f) {
+		us[pos] = u_[pos];
+		return;
+	}
+
+	// Thresholding
+	float u_pos = u_[pos];
+	float dun = (u[pos] - u_pos);
+	float Ius = Iu[pos];
+	float rho = Ius * dun + Iz[pos];
+
+	float upper = lambda * theta * (Ius * Ius);
+	float lower = -lambda * theta *(Ius * Ius);
+	float du;
+
+	if ((rho <= upper) && (rho >= lower)) {
+		if (Ius == 0) {
+			du = dun;
+		}
+		else {
+			du = dun - rho / Ius;
+		}
+	}
+	else if (rho < lower) {
+		du = dun + lambda * theta *Ius;
+	}
+	else if (rho > upper) {
+		du = dun - lambda * theta *Ius;
+	}
+
+	us[pos] = u_pos + du;
+}
+
+void StereoLite::ThresholdingL1LambdaMasked(float* mask, float* u, float* u_, float* Iu, float* Iz, float lambda, float* lambdaMask, float theta,
+	float* us, int w, int h, int s)
+{
+	dim3 threads(BlockWidth, BlockHeight);
+	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
+
+	LiteThresholdingL1LambdaMaskedKernel << < blocks, threads >> > (mask, u, u_, Iu, Iz, lambda, lambdaMask, theta,
+		w, h, s, us);
+}
+
+__global__ void LiteSparsePriorL1Kernel(float* mask, float* u, float* u_, float* usparse, float* Iu, float* Iz, float lambda, float l2lambda, 
+	float* lambdaMask, float theta,
+	int width, int height, int stride, float* us)
+{
+	int iy = blockIdx.y * blockDim.y + threadIdx.y;        // current row 
+	int ix = blockIdx.x * blockDim.x + threadIdx.x;        // current column 
+
+	if ((iy >= height) && (ix >= width)) return;
+	int pos = ix + iy * stride;
+	if (mask[pos] == 0.0f) return;
+
+	// Thresholding
+	float u_pos = u_[pos];
+	float dun = (u[pos] - u_pos);
+	float Ius = Iu[pos];
+	float rho = Ius * dun + Iz[pos];
+
+	float upper = lambda * theta * (Ius * Ius);
+	float lower = -lambda * theta *(Ius * Ius);
+	float du;
+
+	if ((rho <= upper) && (rho >= lower)) {
+		if (Ius == 0) {
+			du = dun;
+		}
+		else {
+			du = dun - rho / Ius;
+		}
+	}
+	else if (rho < lower) {
+		du = dun + lambda * theta *Ius;
+	}
+	else if (rho > upper) {
+		du = dun - lambda * theta *Ius;
+	}
+
+	float ul1 = u_pos + du;
+	float usparsepos = usparse[pos];
+	/*if (abs(ul1 - usparsepos) > 5.0f) {
+		usparsepos = ul1;
+	}*/
+
+	if (lambdaMask[pos] == 0.0f) {
+		us[pos] = ul1;
+	}
+	else {
+		us[pos] = (ul1 + l2lambda * usparsepos) / (1.0f + l2lambda);
+	}
+}
+
+void StereoLite::SparsePriorL1(float* fisheyeMask, float* u, float* u_, float * usparse, float* Iu, float* Iz, 
+	float lambda, float l2lambda, float* lambdaMask, float theta,
+	float* us, int w, int h, int s)
+{
+	dim3 threads(BlockWidth, BlockHeight);
+	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
+
+	LiteSparsePriorL1Kernel << < blocks, threads >> > (fisheyeMask, u, u_, usparse, Iu, Iz, lambda, l2lambda, 
+		lambdaMask, theta,
+		w, h, s, us);
+}
+
+
+__global__ void LiteL2Kernel (float* mask, float* u, float* u_, float l2lambda, float* lambdaMask, 
+	int width, int height, int stride, float* us)
+{
+	int iy = blockIdx.y * blockDim.y + threadIdx.y;        // current row 
+	int ix = blockIdx.x * blockDim.x + threadIdx.x;        // current column 
+
+	if ((iy >= height) && (ix >= width)) return;
+	int pos = ix + iy * stride;
+	if (mask[pos] == 0.0f) return;
+
+	if (lambdaMask[pos] == 0.0f) {
+		us[pos] = u_[pos];
+	}
+	else {
+		us[pos] = (u_[pos] + l2lambda * u[pos])/(1.0f + l2lambda);
+	}
+}
+
+void StereoLite::SimpleL2(float* mask, float* u, float* u_, float l2lambda, float* lambdaMask,
+	float* us, int w, int h, int s)
+{
+	dim3 threads(BlockWidth, BlockHeight);
+	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
+
+	LiteL2Kernel << < blocks, threads >> > (mask, u, u_, l2lambda, lambdaMask, w, h, s, us);
+}
+
 // Solve Problem1B
 __global__ void LiteSolveProblem1bMaskedKernel(float* mask, float* u, float2 *p, float theta,
 	int width, int height, int stride, float* us)
