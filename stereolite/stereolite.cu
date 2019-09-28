@@ -702,7 +702,11 @@ int StereoLite::planeSweepPyramidL1Refinement() {
 			Clone(d_u_last, pW[level], pH[level], pS[level], d_u_);
 
 			// Inner iteration
-			for (int iter = 0; iter < nSolverIters; iter++) {
+			int solverIters;
+			if (level == 0) solverIters = nSolverIters;
+			else solverIters = 2;
+			
+			for (int iter = 0; iter < solverIters; iter++) {
 				// Solve Problem1A
 				//ThresholdingL1Masked(pFisheyeMask[level], d_u, d_u_, d_Iu, d_Iz, lambda, theta, d_us, pW[level], pH[level], pS[level]);
 				SparsePriorL1(pFisheyeMask[level], d_u, d_u_, pSparsePrior[level], d_Iu, d_Iz, 

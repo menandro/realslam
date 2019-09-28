@@ -1,8 +1,8 @@
 #include "main.h"
 
 int main(void) {
-	test_PlaneSweepWithTvl1();
-	//test_ImageSequencePlanesweep();
+	//test_PlaneSweepWithTvl1();
+	test_ImageSequencePlanesweep();
 	//test_PlaneSweep();
 	//test_ImageSequence();
 	//test_ImageSequenceLite();

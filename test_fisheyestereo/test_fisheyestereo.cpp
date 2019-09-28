@@ -97,13 +97,13 @@ int test_PlaneSweepWithTvl1() {
 }
 
 int test_ImageSequencePlanesweep() {
-	std::string mainfolder = "h:/data_rs_iis/20190913_1";
-	std::string outputfolder = "/propl1_half";
-	StereoLite * stereotgv = new StereoLite();
+	std::string mainfolder = "d:/data/20190909";
+	std::string outputfolder = "/planesweepl1_half";
+	StereoLite * stereotgv = new StereoLite();	
 	int width = 848;
 	int height = 800;
 	float stereoScaling = 2.0f;
-	int nLevel = 4;
+	int nLevel = 5;
 	float fScale = 2.0f;
 	int nWarpIters = 10;
 	int nSolverIters = 5;
@@ -152,7 +152,7 @@ int test_ImageSequencePlanesweep() {
 
 	clock_t avetime = 0;
 
-	for (int k = 0; k <= 1274; k++) {
+	for (int k = 0; k <= 771; k++) {
 		cv::Mat im1 = cv::imread(mainfolder + "/colored_0/data/im" + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
 		cv::Mat im2 = cv::imread(mainfolder + "/colored_1/data/im" + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
 
@@ -163,16 +163,19 @@ int test_ImageSequencePlanesweep() {
 		cv::resize(equi2, halfFisheye2, cv::Size(stereoWidth, stereoHeight));
 
 		cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
-		
+		cv::Mat depthPs = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+
 		clock_t start = clock();
 		stereotgv->copyImagesToDevice(halfFisheye1, halfFisheye2);
 		//stereotgv->planeSweep();
-		stereotgv->planeSweepPropagationL1Refinement(upsamplingRadius);
+		//stereotgv->planeSweepPropagationL1Refinement(upsamplingRadius);
 		//stereotgv->planeSweepWithPropagation(upsamplingRadius);
 		//stereotgv->copyPlanesweepFinalToHost(depth);
 		//stereotgv->planeSweepL1upsamplingAndRefinement();
-		//stereotgv->planeSweepPyramidL1Refinement();
+		stereotgv->planeSweepPyramidL1Refinement();
 		//stereotgv->solveStereoForwardMasked();
+		stereotgv->copyPlanesweepFinalToHost(depth);
+		depthPs = depth.clone();
 		stereotgv->copyStereoToHost(depth);
 		//stereotgv->copyPropagatedDisparityToHost(depth);
 		clock_t timeElapsed = (clock() - start);
@@ -182,6 +185,10 @@ int test_ImageSequencePlanesweep() {
 		cv::Mat depthVis;
 		depth.copyTo(depthVis, fisheyeMask8);
 		showDepthJet("color", depthVis, 5.0f, false);
+
+		cv::Mat depthVisPs;
+		depthPs.copyTo(depthVisPs, fisheyeMask8);
+		showDepthJet("ps", depthVisPs, 5.0f, false);
 
 		std::string appender;
 		if (k < 10) appender = "000";
