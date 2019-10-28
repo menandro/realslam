@@ -18,6 +18,7 @@ Device: T265
 #include <opencv2/optflow.hpp>
 #include <stereo/stereo.h>
 #include <stereotgv/stereotgv.h>
+#include <stereolite/stereolite.h>
 
 class Tslam {
 public:
@@ -115,14 +116,17 @@ public:
 		rs2::frameset frameset;
 		rs2::config cfg;
 
+		const int width = 848;
+		const int height = 800;
+
 		cv::Mat fisheye1;
 		cv::Mat fisheye2;
 		cv::Mat fisheye132f;
 		cv::Mat fisheye232f;
 		cv::Mat fisheyeMask;
-
-		const int width = 848;
-		const int height = 800;
+		cv::Mat depth32f = cv::Mat(height, width, CV_32F);
+		cv::Mat depthHalf32f = cv::Mat(height / 2, width / 2, CV_32F);
+		cv::Mat mask;
 
 		cv::cuda::GpuMat d_fe1;
 		cv::cuda::GpuMat d_fe2;
@@ -173,11 +177,14 @@ public:
 	// Stereo
 	Stereo* stereo;
 	StereoTgv* stereotgv;
+	StereoLite* stereolite;
 	int stereoWidth;
 	int stereoHeight;
 	float stereoScaling;
 	cv::Mat fisheyeMask;
 	cv::Mat fisheyeMask8;
+	cv::Mat fisheyeMaskHalf;
+	cv::Mat fisheyeMask8Half;
 
 	// Upsampling
 	lup::Upsampling * upsampling;
@@ -213,12 +220,14 @@ public:
 	int initStereoTVL1();
 	int initStereoTGVL1();
 	int solveStereoTGVL1();
+	int solveStereoTVL1();
 	int initDepthUpsampling();
 	cv::Mat depthVisMask;
 	bool isDepthVisMaskCreated = false;
 
 
 	// Utilities
+	int createDepthThresholdMask(T265 &device, float maxDepth);
 	void visualizeKeypoints(T265 &device, std::string windowNamePrefix);
 	void visualizeMatchedStereoPoints(T265 &device, std::string windowNamePrefix);
 	void visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir1, std::string windowNamePrefix);

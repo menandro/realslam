@@ -37,7 +37,7 @@ void StereoLite::Clone(float2* dst, int w, int h, int s, float2* src) {
 
 // Set Value
 __global__
-void SetValueKernel(float *image, float value, int width, int height, int stride)
+void LiteSetValueKernel(float *image, float value, int width, int height, int stride)
 {
 	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
 	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
@@ -53,5 +53,5 @@ void StereoLite::SetValue(float *image, float value, int w, int h, int s)
 {
 	dim3 threads(BlockWidth, BlockHeight);
 	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
-	SetValueKernel << < blocks, threads >> > (image, value, w, h, s);
+	LiteSetValueKernel << < blocks, threads >> > (image, value, w, h, s);
 }

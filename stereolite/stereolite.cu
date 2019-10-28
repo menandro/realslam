@@ -144,6 +144,9 @@ int StereoLite::initialize(int width, int height, float lambda, float theta, flo
 	checkCudaErrors(cudaMalloc(&ps_i1warp, dataSize32f));
 	checkCudaErrors(cudaMalloc(&ps_i1warps, dataSize32f));
 	checkCudaErrors(cudaMalloc(&ps_error, dataSize32f));
+	checkCudaErrors(cudaMalloc(&ps_errorHolder, dataSize32f));
+	checkCudaErrors(cudaMalloc(&ps_meanError, dataSize32f));
+	
 	checkCudaErrors(cudaMalloc(&ps_depth, dataSize32f));
 	checkCudaErrors(cudaMalloc(&ps_disparityForward, dataSize32f));
 	checkCudaErrors(cudaMalloc(&ps_disparityBackward, dataSize32f));
@@ -155,6 +158,7 @@ int StereoLite::initialize(int width, int height, float lambda, float theta, flo
 	checkCudaErrors(cudaMalloc(&ps_propagatedDisparity, dataSize32f));
 	checkCudaErrors(cudaMalloc(&ps_propagatedWarpForward, dataSize32fc2));
 	checkCudaErrors(cudaMalloc(&d_lambdaMask, dataSize32f));
+	checkCudaErrors(cudaMalloc(&ps_leftRightDiff, dataSize32f));
 
 	// 3D
 	checkCudaErrors(cudaMalloc(&d_X, dataSize32fc3));
@@ -379,7 +383,8 @@ int StereoLite::planeSweep() {
 	checkCudaErrors(cudaMemset(ps_currentWarpForward, 0, dataSize32fc2));
 	Clone(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], pI1[lvl]);
 	SetValue(ps_error, planeSweepMaxError, pW[lvl], pH[lvl], pS[lvl]);
-	for (int sweep = 0; sweep < planeSweepMaxDisparity; sweep += planeSweepStride) {
+	SetValue(ps_meanError, 0.0f, pW[lvl], pH[lvl], pS[lvl]);
+	for (int sweep = 0; sweep <= planeSweepMaxDisparity; sweep += planeSweepStride) {
 		PlaneSweepCorrelationGetWarp(ps_i1warp, pI0[lvl], ps_disparityForward, sweep, planeSweepWindow,
 			ps_currentWarpForward, ps_warpForward, d_tvForward, pW[lvl], pH[lvl], pS[lvl], ps_error);
 		for (int psStride = 0; psStride < planeSweepStride; psStride++) {
@@ -394,7 +399,8 @@ int StereoLite::planeSweep() {
 	checkCudaErrors(cudaMemset(ps_disparityBackward, 0, dataSize32f));
 	Clone(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], pI0[lvl]);
 	SetValue(ps_error, planeSweepMaxError, pW[lvl], pH[lvl], pS[lvl]);
-	for (int sweep = 0; sweep < planeSweepMaxDisparity; sweep += planeSweepStride) {
+	SetValue(ps_meanError, 0.0f, pW[lvl], pH[lvl], pS[lvl]);
+	for (int sweep = 0; sweep <= planeSweepMaxDisparity; sweep += planeSweepStride) {
 		PlaneSweepCorrelation(ps_i1warp, pI1[lvl], ps_disparityBackward, sweep, planeSweepWindow,
 			pW[lvl], pH[lvl], pS[lvl], ps_error);
 		for (int psStride = 0; psStride < planeSweepStride; psStride++) {
@@ -510,11 +516,16 @@ int StereoLite::planeSweepPropagationL1Refinement(int upsamplingRadius) {
 		Subtract(d_u_, d_u_last, pW[level], pH[level], pS[level], d_du);
 		LimitRange(d_du, limitRange, pW[level], pH[level], pS[level], d_du);
 		Add(d_u_last, d_du, pW[level], pH[level], pS[level], d_u_);
+		
+		
+		
+
 		Clone(d_u, pW[level], pH[level], pS[level], d_u_);
 
 		ComputeOpticalFlowVector(d_du, d_tv2, pW[level], pH[level], pS[level], d_dwarpUV);
 		Add(d_warpUV, d_dwarpUV, pW[level], pH[level], pS[level], d_warpUV);
 
+		//
 		////DEBUGDEPTH("depth", d_u, baseline, focal, pH[level], pS[level], false, false);
 		//DEBUGWARPIMAGE("warp", d_i1warp, pH[level], pS[level], false, false);
 		//cv::waitKey(1);
@@ -726,10 +737,13 @@ int StereoLite::planeSweepPyramidL1Refinement() {
 			Subtract(d_u_, d_u_last, pW[level], pH[level], pS[level], d_du);
 			LimitRange(d_du, limitRange, pW[level], pH[level], pS[level], d_du);
 			Add(d_u_last, d_du, pW[level], pH[level], pS[level], d_u_);
+			//MedianFilterDisparity(d_u_, pW[level], pH[level], pS[level], d_u_, 5);
+			
 			Clone(d_u, pW[level], pH[level], pS[level], d_u_);
 
 			ComputeOpticalFlowVector(d_du, d_tv2, pW[level], pH[level], pS[level], d_dwarpUV);
 			Add(d_warpUV, d_dwarpUV, pW[level], pH[level], pS[level], d_warpUV);
+			//MedianFilterDisparity(d_warpUV, pW[level], pH[level], pS[level], d_warpUV, 5);
 		}
 
 		// Upscale

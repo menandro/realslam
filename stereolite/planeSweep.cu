@@ -1,10 +1,61 @@
 #include "stereolite.h"
 
+// Subtract I0 and I1 for error
 __global__
-void LitePlaneSweepCorrelationKernel(float* i0, float* i1, float* disparity, int sweepDistance,
-	int windowSize,
-	int width, int height, int stride,
-	float *error)
+void LitePlaneSweepGetErrorKernel(float* i0, float* i1, int width, int height, int stride, float *error)
+{
+	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
+	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
+
+	const int pos = ix + iy * stride;
+
+	if (ix >= width || iy >= height) return;
+
+	error[pos] = fabsf(i0[pos] - i1[pos]);
+}
+
+
+// Remove disparity of pixels whose error is very close to the mean error
+__global__
+void LitePlaneSweepMeanCleanup(float* error, float* meanError, float standardDev, float* disparity, float2* finalWarp,
+	int width, int height, int stride)
+{
+	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
+	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
+
+	const int pos = ix + iy * stride;
+
+	if (ix >= width || iy >= height) return;
+
+	if ((meanError[pos] - error[pos]) > standardDev) {
+		error[pos] = 0.0f;
+		disparity[pos] = 0.0f;
+		finalWarp[pos] = make_float2(0.0f, 0.0f);
+	}
+}
+
+__global__
+void LitePlaneSweepMeanCleanup(float* error, float* meanError, float standardDev, float* disparity,
+	int width, int height, int stride)
+{
+	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
+	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
+
+	const int pos = ix + iy * stride;
+
+	if (ix >= width || iy >= height) return;
+
+	if ((meanError[pos] - error[pos]) > standardDev) {
+		error[pos] = 0.0f;
+		disparity[pos] = 0.0f;
+	}
+}
+
+
+// Window-based SAD
+__global__
+void LitePlaneSweepCorrelationKernel(float* imError, float* disparity, int sweepDistance, int maxDisparity,
+	int windowSize, int width, int height, int stride, float *error, float *meanError)
 {
 	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
 	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
@@ -21,35 +72,46 @@ void LitePlaneSweepCorrelationKernel(float* i0, float* i1, float* disparity, int
 			int col = (ix + i - (windowSize - 1) / 2);
 			int row = (iy + j - (windowSize - 1) / 2);
 			if ((col >= 0) && (col < width) && (row >= 0) && (row < height)) {
-				currError += fabsf(i0[col + stride * row] - i1[col + stride * row]);
+				currError += imError[col + stride * row];
 				windowCount++;
 			}
 		}
 	}
 	currError = currError / windowCount;
+	meanError[pos] = ((float)sweepDistance * meanError[pos] + currError) / ((float)sweepDistance + 1.0f);
 	if (currError < error[pos]) {
-		error[pos] = currError;
-		disparity[pos] = (float)sweepDistance;
+		/*if (sweepDistance == maxDisparity) {
+			error[pos] = 0.0f;
+			disparity[pos] = 0.0f;
+		}
+		else {*/
+			error[pos] = currError;
+			disparity[pos] = (float)sweepDistance;
+		//}
 	}
 
 }
 
 void StereoLite::PlaneSweepCorrelation(float *i0, float *i1, float* disparity, int sweepDistance, int windowSize,
-	int w, int h, int s,
-	float *error)
+	int w, int h, int s, float *error)
 {
 	dim3 threads(BlockWidth, BlockHeight);
 	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
 
-	LitePlaneSweepCorrelationKernel << <blocks, threads >> > (i0, i1, disparity, sweepDistance, windowSize, w, h, s, error);
+	//LitePlaneSweepCorrelationKernel << <blocks, threads >> > (i0, i1, disparity, sweepDistance, windowSize, w, h, s, error);
+	LitePlaneSweepGetErrorKernel << < blocks, threads >> > (i0, i1, w, h, s, ps_errorHolder);
+	LitePlaneSweepCorrelationKernel << <blocks, threads >> > (ps_errorHolder, disparity, sweepDistance, 
+		planeSweepMaxDisparity, windowSize,	w, h, s, error, ps_meanError);
+	LitePlaneSweepMeanCleanup << < blocks, threads >> > (error, ps_meanError, planeSweepStandardDev, disparity,
+		w, h, s);
 }
 
 
+// Window-based SAD with warping vector fetch for left-right consistency calculation
 __global__
-void LitePlaneSweepCorrelationGetWarpKernel(float* i0, float* i1, float* disparity, int sweepDistance,
+void LitePlaneSweepCorrelationGetWarpKernel(float* imError, float* disparity, int sweepDistance, int maxDisparity,
 	int windowSize, float2* currentWarp, float2 * finalWarp, float2* tv,
-	int width, int height, int stride,
-	float *error)
+	int width, int height, int stride, float *error, float *meanError)
 {
 	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
 	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
@@ -69,36 +131,94 @@ void LitePlaneSweepCorrelationGetWarpKernel(float* i0, float* i1, float* dispari
 			int col = (ix + i - (windowSize - 1) / 2);
 			int row = (iy + j - (windowSize - 1) / 2);
 			if ((col >= 0) && (col < width) && (row >= 0) && (row < height)) {
-				currError += fabsf(i0[col + stride * row] - i1[col + stride * row]);
+				currError += imError[col + stride * row];
 				windowCount++;
 			}
 		}
 	}
 	currError = currError / windowCount;
+	meanError[pos] = ((float)sweepDistance * meanError[pos] + currError) / ((float)sweepDistance + 1.0f);
 	if (currError < error[pos]) {
-		error[pos] = currError;
-		disparity[pos] = (float)sweepDistance;
-		finalWarp[pos] = currentWarp[pos];
+		/*if (sweepDistance == maxDisparity) {
+			error[pos] = 0.0f;
+			disparity[pos] = 0.0f;
+			finalWarp[pos] = make_float2(0.0f, 0.0f);
+		}
+		else {*/
+			error[pos] = currError;
+			disparity[pos] = (float)sweepDistance;
+			finalWarp[pos] = currentWarp[pos];
+		//}
 	}
 }
 
+
 void StereoLite::PlaneSweepCorrelationGetWarp(float *i0, float *i1, float* disparity, int sweepDistance, int windowSize,
-	float2* currentWarp, float2* finalWarp, float2 * translationVector,
-	int w, int h, int s,
-	float *error)
+	float2* currentWarp, float2* finalWarp, float2 * translationVector, int w, int h, int s, float *error)
 {
 	dim3 threads(BlockWidth, BlockHeight);
 	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
 
-	LitePlaneSweepCorrelationGetWarpKernel << <blocks, threads >> > (i0, i1, disparity, sweepDistance, windowSize, 
-		currentWarp, finalWarp, translationVector, w, h, s, error);
+	/*LitePlaneSweepCorrelationGetWarpKernel << <blocks, threads >> > (i0, i1, disparity, sweepDistance, windowSize, 
+		currentWarp, finalWarp, translationVector, w, h, s, error);*/
+	LitePlaneSweepGetErrorKernel << < blocks, threads >> > (i0, i1, w, h, s, ps_errorHolder);
+	LitePlaneSweepCorrelationGetWarpKernel << <blocks, threads >> > (ps_errorHolder, disparity, sweepDistance, 
+		planeSweepMaxDisparity, windowSize, currentWarp, finalWarp, translationVector, w, h, s, error, ps_meanError);
+	LitePlaneSweepMeanCleanup << < blocks, threads >> > (error, ps_meanError, planeSweepStandardDev, disparity, finalWarp, 
+		w, h, s);
 }
 
+
+// Left to Right Consistency
 texture<float, cudaTextureType2D, cudaReadModeElementType> disparityTex;
 
 __global__
-void LiteLeftRightConsistencyKernel(float *disparityForward, float2* warpingVector,
+void LiteLeftRightConsistencyKernel(float *disparityForward, float2* warpingVector, float* leftRightDiff,
 	float epsilon, float* disparityFinal, float2* finalWarpForward, int width, int height, int stride)
+{
+	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
+	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
+
+	const int pos = ix + iy * stride;
+
+	if (ix >= width || iy >= height) return;
+
+	float2 warpUV = warpingVector[pos];
+	int windowSize = 3;
+	bool isConsistent = true;
+	float currDiff = 0.0f;
+	int windowCnt = 0;
+	for (int j = 0; j < windowSize; j++) {
+		for (int i = 0; i < windowSize; i++) {
+			//get values
+			int col = (ix + i - (windowSize - 1) / 2);
+			int row = (iy + j - (windowSize - 1) / 2);
+			if ((col >= 0) && (col < width) && (row >= 0) && (row < height)) {
+				/*if (leftRightDiff[col + stride * row] > epsilon) {
+					isConsistent = false;
+				}*/
+				currDiff += leftRightDiff[col + stride * row];
+				windowCnt++;
+			}
+		}
+	}
+	currDiff = currDiff / (float)windowCnt;
+	if (currDiff > epsilon) {
+		isConsistent = false;
+	}
+	if (!isConsistent){
+		disparityFinal[pos] = 0.0f;
+		finalWarpForward[pos] = make_float2(0.0f, 0.0f);
+	}
+	else {
+		disparityFinal[pos] = disparityForward[pos];
+		finalWarpForward[pos] = warpUV;
+	}
+}
+
+__global__
+void LiteLeftRightDiffKernel(float *disparityForward, float2* warpingVector, float* leftRightDiff, 
+	int width, int height, int stride)
 {
 	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
 	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
@@ -110,16 +230,11 @@ void LiteLeftRightConsistencyKernel(float *disparityForward, float2* warpingVect
 	float2 warpUV = warpingVector[pos];
 	float x = ((float)ix + warpUV.x + 0.5f) / (float)width;
 	float y = ((float)iy + warpUV.y + 0.5f) / (float)height;
+	float dx = 1.0f / (float)width;
+	float dy = 1.0f / (float)height;
 
 	float dispBackward = tex2D(disparityTex, x, y);
-	if (abs(dispBackward - disparityForward[pos]) > epsilon) {
-		disparityFinal[pos] = 0.0f;
-		finalWarpForward[pos] = make_float2(0.0f, 0.0f);
-	}
-	else {
-		disparityFinal[pos] = disparityForward[pos];
-		finalWarpForward[pos] = warpUV;
-	}
+	leftRightDiff[pos] = abs(dispBackward - disparityForward[pos]);
 }
 
 void StereoLite::LeftRightConsistency(float *disparityForward, float* disparityBackward, float2* warpingVector, 
@@ -139,12 +254,14 @@ void StereoLite::LeftRightConsistency(float *disparityForward, float* disparityB
 
 	cudaBindTexture2D(0, disparityTex, disparityBackward, w, h, s * sizeof(float));
 
-	LiteLeftRightConsistencyKernel << <blocks, threads >> > (disparityForward, warpingVector,
+	LiteLeftRightDiffKernel << < blocks, threads >> > (disparityForward, warpingVector, ps_leftRightDiff, w, h, s);
+	LiteLeftRightConsistencyKernel << <blocks, threads >> > (disparityForward, warpingVector, ps_leftRightDiff,
 		epsilon, disparityFinal, finalWarpForward, w, h, s);
 }
 
 
 
+// [Hirata] Upsampling/Propagation
 __global__ void LitePropagateColorOnlyKernel(float* grad, float* lidar, float2* warpUV, float2 * warpUVOut, float* depthOut, int radius,
 	int width, int height, int stride)
 {
@@ -273,7 +390,6 @@ void StereoLite::PropagateColorOnly(float* grad, float* lidar, float2 * warpUV, 
 	LitePropagateColorOnlyKernel << < blocks, threads >> > (grad, lidar, warpUV, warpUVOut, depthOut, radius, width, height, stride);
 }
 
-
 texture<float, 2, cudaReadModeElementType> texForGradient;
 
 __global__ void LiteGradientKernel(float* output, int width, int height, int stride) {
@@ -369,5 +485,92 @@ void StereoLite::GetMask(float* input, float* output, bool isPositive, int w, in
 	}
 	else {
 		GetMaskNegativeKernel << < blocks, threads >> > (input, output, w, h, s);
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// OLD KERNELS
+__global__
+void LitePlaneSweepCorrelationKernel(float* i0, float* i1, float* disparity, int sweepDistance,
+	int windowSize, int width, int height, int stride, float *error)
+{
+	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
+	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
+
+	const int pos = ix + iy * stride;
+
+	if (ix >= width || iy >= height) return;
+
+	float currError = 0.0f;
+	int windowCount = 0;
+	for (int j = 0; j < windowSize; j++) {
+		for (int i = 0; i < windowSize; i++) {
+			//get values
+			int col = (ix + i - (windowSize - 1) / 2);
+			int row = (iy + j - (windowSize - 1) / 2);
+			if ((col >= 0) && (col < width) && (row >= 0) && (row < height)) {
+				currError += fabsf(i0[col + stride * row] - i1[col + stride * row]);
+				windowCount++;
+			}
+		}
+	}
+	currError = currError / windowCount;
+	if (currError < error[pos]) {
+		error[pos] = currError;
+		disparity[pos] = (float)sweepDistance;
+	}
+
+}
+
+__global__
+void LitePlaneSweepCorrelationGetWarpKernel(float* i0, float* i1, float* disparity, int sweepDistance,
+	int windowSize, float2* currentWarp, float2 * finalWarp, float2* tv,
+	int width, int height, int stride, float *error)
+{
+	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
+	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
+
+	const int pos = ix + iy * stride;
+
+	if (ix >= width || iy >= height) return;
+
+	currentWarp[pos].x = currentWarp[pos].x + tv[pos].x;
+	currentWarp[pos].y = currentWarp[pos].y + tv[pos].y;
+
+	float currError = 0.0f;
+	int windowCount = 0;
+	for (int j = 0; j < windowSize; j++) {
+		for (int i = 0; i < windowSize; i++) {
+			//get values
+			int col = (ix + i - (windowSize - 1) / 2);
+			int row = (iy + j - (windowSize - 1) / 2);
+			if ((col >= 0) && (col < width) && (row >= 0) && (row < height)) {
+				currError += fabsf(i0[col + stride * row] - i1[col + stride * row]);
+				windowCount++;
+			}
+		}
+	}
+	currError = currError / windowCount;
+	if (currError < error[pos]) {
+		error[pos] = currError;
+		disparity[pos] = (float)sweepDistance;
+		finalWarp[pos] = currentWarp[pos];
 	}
 }

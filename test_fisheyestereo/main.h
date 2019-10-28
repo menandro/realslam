@@ -37,6 +37,9 @@
 #pragma comment(lib, LIB_PATH "opencv_cudaimgproc" CV_VER_NUM LIB_EXT)
 #pragma comment(lib, LIB_PATH "opencv_video" CV_VER_NUM LIB_EXT)
 
+
+int test_VehicleSegmentationSequence();
+int test_VehicleSegmentation();
 int test_PlaneSweepWithTvl1();
 int test_ImageSequencePlanesweep();
 int test_PlaneSweep();

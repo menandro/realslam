@@ -1,8 +1,199 @@
 #include "main.h"
 
+int test_VehicleSegmentationSequence() {
+	std::string mainfolder = "h:/data_rs_iis/20190913_1";
+	std::string outputfolder = "/segmented";
+	StereoLite * stereotgv = new StereoLite();
+	int width = 848;
+	int height = 800;
+	float stereoScaling = 2.0f;
+	int nLevel = 5;
+	float fScale = 2.0f;
+	int nWarpIters = 10;
+	int nSolverIters = 5;
+	float lambda = 1.0f;
+	float theta = 0.33f;
+	float tau = 0.125f;
+	stereotgv->limitRange = 0.2f;
+	stereotgv->planeSweepMaxError = 1000.0f;
+	stereotgv->planeSweepMaxDisparity = (int)(50.0f / stereoScaling);
+	stereotgv->planeSweepStride = 1;
+	stereotgv->planeSweepWindow = 9;
+	stereotgv->planeSweepEpsilon = 1.0f;
+	stereotgv->l2lambda = 1.0f;
+
+	int stereoWidth = (int)((float)width / stereoScaling);
+	int stereoHeight = (int)((float)height / stereoScaling);
+	stereotgv->baseline = 0.0642f;
+	stereotgv->focal = 285.8557f / stereoScaling;
+	cv::Mat translationVector, calibrationVector;
+	if (stereoScaling == 2.0f) {
+		translationVector = cv::readOpticalFlow("../test_rstracking/translationVectorHalf.flo");
+		calibrationVector = cv::readOpticalFlow("../test_rstracking/calibrationVectorHalf.flo");
+	}
+	else {
+		translationVector = cv::readOpticalFlow("../test_rstracking/translationVector.flo");
+		calibrationVector = cv::readOpticalFlow("../test_rstracking/calibrationVector.flo");
+	}
+
+	stereotgv->initialize(stereoWidth, stereoHeight, lambda, theta, tau, nLevel, fScale, nWarpIters, nSolverIters);
+
+	// Load fisheye Mask
+	cv::Mat fisheyeMask8, fisheyeMask;
+	if (stereoScaling == 2.0f) fisheyeMask8 = cv::imread("maskHalf.png", cv::IMREAD_GRAYSCALE);
+	else fisheyeMask8 = cv::imread("mask.png", cv::IMREAD_GRAYSCALE);
+	fisheyeMask8.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
+	stereotgv->copyMaskToDevice(fisheyeMask);
+
+	// Load vector fields
+	stereotgv->loadVectorFields(translationVector, calibrationVector);
+
+	cv::Mat halfFisheye1, halfFisheye2;
+	cv::Mat equi1, equi2;
+
+	clock_t avetime = 0;
+
+	for (int k = 0; k <= 1274; k++) {
+		cv::Mat im1 = cv::imread(mainfolder + "/colored_0/data/im" + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
+		cv::Mat im2 = cv::imread(mainfolder + "/colored_1/data/im" + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
+
+		// Solve stereo depth
+		cv::equalizeHist(im1, equi1);
+		cv::equalizeHist(im2, equi2);
+		cv::resize(equi1, halfFisheye1, cv::Size(stereoWidth, stereoHeight));
+		cv::resize(equi2, halfFisheye2, cv::Size(stereoWidth, stereoHeight));
+
+		cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+		cv::Mat depthPs = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+
+		clock_t start = clock();
+		stereotgv->copyImagesToDevice(halfFisheye1, halfFisheye2);
+		stereotgv->planeSweepPyramidL1Refinement();
+		stereotgv->copyPlanesweepFinalToHost(depth);
+		depthPs = depth.clone();
+		stereotgv->copyStereoToHost(depth);
+		clock_t timeElapsed = (clock() - start);
+		avetime = (avetime + timeElapsed) / 2;
+		std::cout << "time: " << avetime << " ms ";
+
+		cv::Mat depthVis;
+		depth.copyTo(depthVis, fisheyeMask8);
+		showDepthJet("color", depthVis, 5.0f, false);
+
+		cv::Mat depthVisPs;
+		depthPs.copyTo(depthVisPs, fisheyeMask8);
+		showDepthJet("ps", depthVisPs, 5.0f, false);
+
+		cv::Mat thresholdMask;
+		cv::threshold(depth, thresholdMask, 2.0, 255, cv::THRESH_BINARY_INV);
+		thresholdMask.convertTo(thresholdMask, CV_8U);
+		cv::imshow("thresh", thresholdMask);
+
+		cv::Mat masked;
+		halfFisheye1.copyTo(masked, ~(thresholdMask)& fisheyeMask8);
+		cv::imshow("masked", masked);
+
+		std::string appender;
+		if (k < 10) appender = "000";
+		else if ((k >= 10) && (k < 100)) appender = "00";
+		else if ((k >= 100) && (k < 1000)) appender = "0";
+		else appender = "";
+		cv::imwrite(mainfolder + outputfolder + "/im" + appender + std::to_string(k) + ".png", masked);
+
+		std::cout << k << std::endl;
+		cv::imshow("test", halfFisheye1);
+		cv::waitKey(1);
+	}
+	return 0;
+}
+
+int test_VehicleSegmentation() {
+	cv::Mat im1 = cv::imread("h:/data_rs_iis/20190913_1/colored_0/data/im1014.png", cv::IMREAD_GRAYSCALE);
+	cv::Mat im2 = cv::imread("h:/data_rs_iis/20190913_1/colored_1/data/im1014.png", cv::IMREAD_GRAYSCALE);
+
+	StereoLite * stereotgv = new StereoLite();
+	int width = 848;
+	int height = 800;
+	float stereoScaling = 2.0f;
+	int nLevel = 5;
+	float fScale = 2.0f;
+	int nWarpIters = 10;
+	int nSolverIters = 5;
+	float lambda = 1.0f;
+	float theta = 0.33f;
+	float tau = 0.125f;
+	stereotgv->limitRange = 0.2f;
+	stereotgv->planeSweepMaxError = 1000.0f;
+	stereotgv->planeSweepMaxDisparity = (int)(50.0f / stereoScaling);
+	stereotgv->planeSweepStride = 1;
+	stereotgv->planeSweepWindow = 9;
+	stereotgv->planeSweepEpsilon = 1.0f;
+	stereotgv->l2lambda = 1.0f;
+
+	int stereoWidth = (int)((float)width / stereoScaling);
+	int stereoHeight = (int)((float)height / stereoScaling);
+	stereotgv->baseline = 0.0642f;
+	stereotgv->focal = 285.8557f / stereoScaling;
+	cv::Mat translationVector, calibrationVector;
+	if (stereoScaling == 2.0f) {
+		translationVector = cv::readOpticalFlow("../test_rstracking/translationVectorHalf.flo");
+		calibrationVector = cv::readOpticalFlow("../test_rstracking/calibrationVectorHalf.flo");
+	}
+	else {
+		translationVector = cv::readOpticalFlow("../test_rstracking/translationVector.flo");
+		calibrationVector = cv::readOpticalFlow("../test_rstracking/calibrationVector.flo");
+	}
+
+	stereotgv->initialize(stereoWidth, stereoHeight, lambda, theta, tau, nLevel, fScale, nWarpIters, nSolverIters);
+
+	// Load fisheye Mask
+	cv::Mat fisheyeMask8, fisheyeMask;
+	if (stereoScaling == 2.0f) fisheyeMask8 = cv::imread("maskHalf.png", cv::IMREAD_GRAYSCALE);
+	else fisheyeMask8 = cv::imread("mask.png", cv::IMREAD_GRAYSCALE);
+	fisheyeMask8.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
+	stereotgv->copyMaskToDevice(fisheyeMask);
+
+	// Load vector fields
+	stereotgv->loadVectorFields(translationVector, calibrationVector);
+
+	// Solve stereo depth
+	cv::Mat halfFisheye1, halfFisheye2;
+	cv::Mat equi1, equi2;
+	cv::equalizeHist(im1, equi1);
+	cv::equalizeHist(im2, equi2);
+	cv::resize(equi1, halfFisheye1, cv::Size(stereoWidth, stereoHeight));
+	cv::resize(equi2, halfFisheye2, cv::Size(stereoWidth, stereoHeight));
+
+	cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+	cv::Mat depthProp, depthTV;
+	clock_t start = clock();
+	stereotgv->copyImagesToDevice(halfFisheye1, halfFisheye2);
+	stereotgv->planeSweepPyramidL1Refinement();
+	stereotgv->copyStereoToHost(depth);
+
+	clock_t timeElapsed = (clock() - start);
+	std::cout << "time: " << timeElapsed << " ms" << std::endl;
+
+	cv::Mat depthVis, depthVisProp, depthVisTV;
+	depth.copyTo(depthVis, fisheyeMask8);
+	showDepthJet("color", depthVis, 5.0f, false);
+
+	cv::Mat thresholdMask;
+	cv::threshold(depth, thresholdMask, 2.0, 255, cv::THRESH_BINARY_INV);
+	thresholdMask.convertTo(thresholdMask, CV_8U);
+	cv::imshow("thresh", thresholdMask);
+
+	cv::Mat masked;
+	halfFisheye1.copyTo(masked, ~(thresholdMask) & fisheyeMask8);
+	cv::imshow("masked", masked);
+
+	cv::waitKey();
+	return 0;
+}
+
 int test_PlaneSweepWithTvl1() {
-	cv::Mat im1 = cv::imread("h:/data_rs_iis/20190913_1/colored_0/data/im147.png", cv::IMREAD_GRAYSCALE);
-	cv::Mat im2 = cv::imread("h:/data_rs_iis/20190913_1/colored_1/data/im147.png", cv::IMREAD_GRAYSCALE);
+	cv::Mat im1 = cv::imread("h:/data_rs_iis/20190913_1/colored_0/data/im1014.png", cv::IMREAD_GRAYSCALE);
+	cv::Mat im2 = cv::imread("h:/data_rs_iis/20190913_1/colored_1/data/im1014.png", cv::IMREAD_GRAYSCALE);
 
 	StereoLite * stereotgv = new StereoLite();
 	int width = 848;
@@ -19,12 +210,13 @@ int test_PlaneSweepWithTvl1() {
 	stereotgv->planeSweepMaxError = 1000.0f;
 	stereotgv->planeSweepMaxDisparity = (int)(50.0f / stereoScaling);
 	stereotgv->planeSweepStride = 1;
-	stereotgv->planeSweepWindow = 5;
+	stereotgv->planeSweepWindow = 9;
 	stereotgv->planeSweepEpsilon = 1.0f;
 	int upsamplingRadius = 5;
 	stereotgv->maxPropIter = 3;
 	stereotgv->l2lambda = 1.0f;
 	stereotgv->l2iter = 500;
+	stereotgv->planeSweepStandardDev = 1.0f;
 
 	int stereoWidth = (int)((float)width / stereoScaling);
 	int stereoHeight = (int)((float)height / stereoScaling);
@@ -88,6 +280,12 @@ int test_PlaneSweepWithTvl1() {
 	//showDepthJet("colorProp", depthVisProp, 5.0f, false);
 	depth.copyTo(depthVis, fisheyeMask8);
 	showDepthJet("color", depthVis, 5.0f, false);
+
+	cv::Mat thresholdMask;
+	cv::threshold(depth, thresholdMask, 2.0, 255, cv::THRESH_BINARY_INV);
+	thresholdMask.convertTo(thresholdMask, CV_8U);
+	cv::imshow("thresh", thresholdMask);
+
 	//cv::imshow("equi1", equi1);
 	//cv::imshow("equi2", equi2);
 	/*saveDepthJet("resultPS" + std::to_string(nWarpIters) + std::to_string(nSolverIters)
@@ -97,8 +295,8 @@ int test_PlaneSweepWithTvl1() {
 }
 
 int test_ImageSequencePlanesweep() {
-	std::string mainfolder = "d:/data/20190909";
-	std::string outputfolder = "/planesweepl1_half";
+	std::string mainfolder = "h:/data_rs_iis/20190913_1";
+	std::string outputfolder = "/pshalf_cons3win9iter5";
 	StereoLite * stereotgv = new StereoLite();	
 	int width = 848;
 	int height = 800;
@@ -114,12 +312,13 @@ int test_ImageSequencePlanesweep() {
 	stereotgv->planeSweepMaxError = 1000.0f;
 	stereotgv->planeSweepMaxDisparity = (int)(50.0f / stereoScaling);
 	stereotgv->planeSweepStride = 1;
-	stereotgv->planeSweepWindow = 5;
+	stereotgv->planeSweepWindow = 9;
 	stereotgv->planeSweepEpsilon = 1.0f;
 	int upsamplingRadius = 5;
 	stereotgv->maxPropIter = 3;
 	stereotgv->l2lambda = 1.0f;
 	stereotgv->l2iter = 500;
+	stereotgv->planeSweepStandardDev = 1.0f;
 
 	int stereoWidth = (int)((float)width / stereoScaling);
 	int stereoHeight = (int)((float)height / stereoScaling);
@@ -152,7 +351,7 @@ int test_ImageSequencePlanesweep() {
 
 	clock_t avetime = 0;
 
-	for (int k = 0; k <= 771; k++) {
+	for (int k = 0; k <= 1274; k++) {
 		cv::Mat im1 = cv::imread(mainfolder + "/colored_0/data/im" + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
 		cv::Mat im2 = cv::imread(mainfolder + "/colored_1/data/im" + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
 

@@ -4,7 +4,7 @@ int Tslam::initialize(const char* serialNumber) {
 	viewer = new Viewer();
 
 	// Fisheye Stereo
-	initStereoTGVL1();
+	initStereoTVL1();
 
 	// Upsampling
 	initDepthUpsampling();
@@ -186,7 +186,8 @@ int Tslam::cameraPoseSolver() {
 		cv::imwrite("fs2.png", equi2);*/
 		//visualizeKeypoints(t265, "kp");
 
-		solveStereoTGVL1();
+		solveStereoTVL1();
+		createDepthThresholdMask(t265, 1.0f);
 
 		//cv::Mat depthUpsample = cv::Mat(stereoHeight, upsampling->iAlignUp(stereoWidth), CV_32F);
 		//cv::Mat depthPad, imagePad;
@@ -635,6 +636,16 @@ bool Tslam::processAccel(T265 &device) {
 }
 
 /// Utilities
+int Tslam::createDepthThresholdMask(T265 &device, float maxDepth) {
+	//std::cout << device.depth32f.at<float>(320, 10) << std::endl;
+	cv::threshold(device.depth32f, device.mask, (double)maxDepth, 255, cv::THRESH_BINARY_INV);
+	device.mask.convertTo(device.mask, CV_8U);
+	//std::cout << device.mask.type() << " " << CV_8U << " " << CV_8UC1 << std::endl;
+	cv::imshow("thresh", device.mask);
+	//std::cout << device.depth32f.at<float>(100, 100) << std::endl;
+	return 0;
+}
+
 void Tslam::visualizeKeypoints(T265 &device, std::string windowNamePrefix) {
 	cv::Mat imout1, imout2;
 	cv::drawKeypoints(device.fisheye1, device.keypointsFe1, imout1, cv::Scalar(0, 255, 0), cv::DrawMatchesFlags::DEFAULT);

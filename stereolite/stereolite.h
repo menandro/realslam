@@ -109,6 +109,9 @@ public:
 	float * ps_i1warp;
 	float * ps_i1warps;
 	float * ps_error;
+	float * ps_errorHolder;
+	float * ps_meanError;
+	float planeSweepStandardDev = 1.0f;
 	float * ps_depth;
 	float * ps_disparityForward;
 	float * ps_disparityBackward;
@@ -119,6 +122,7 @@ public:
 	float* ps_grad;
 	float* ps_propagatedDisparity;
 	float2* ps_propagatedWarpForward;
+	float* ps_leftRightDiff;
 	int planeSweepMaxDisparity;
 	int planeSweepWindow;
 	float planeSweepMaxError;
@@ -178,6 +182,7 @@ public:
 		float *X1, float *Y1, float *Z1, int kernelsize);
 	void MedianFilterDisparity(float *input, int w, int h, int s,
 		float *outputu, int kernelsize);
+	void MedianFilterDisparity(float2 *inputu, int w, int h, int s, float2 *outputu, int kernelsize);
 	void Cv8uToGray(uchar * d_iCv8u, float *d_iGray, int w, int h, int s);
 	void Cv8uc3ToGray(uchar3 * d_iRgb, float *d_iGray, int w, int h, int s);
 	void Upscale(const float *src, int width, int height, int stride,

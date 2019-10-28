@@ -158,10 +158,14 @@
     <ClInclude Include="Tslam.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="StereoLite.cpp" />
     <ClCompile Include="StereoTgv.cpp" />
     <ClCompile Include="Tslam.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\stereolite\stereolite.vcxproj">
+      <Project>{a58fa226-8d96-450f-9cd5-7d82408168e6}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\stereotgv\stereotgv.vcxproj">
       <Project>{bc130900-e36b-4f95-8089-eacbcd4a56a3}</Project>
     </ProjectReference>

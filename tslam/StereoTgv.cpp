@@ -87,34 +87,34 @@ int Tslam::solveStereoTGVL1() {
 }
 
 // Old TVL1, also wrong
-int Tslam::initStereoTVL1() {
-	stereo = new Stereo();
-	stereoScaling = 2.0f;
-	stereoWidth = (int)(t265.width / stereoScaling);
-	stereoHeight = (int)(t265.height / stereoScaling);
-	stereo->baseline = 0.0642f;
-	stereo->focal = 285.8557f / stereoScaling;
-	cv::Mat translationVector, calibrationVector;
-	if (stereoScaling == 2.0f) {
-		translationVector = cv::readOpticalFlow("translationVectorHalf.flo");
-		calibrationVector = cv::readOpticalFlow("calibrationVectorHalf.flo");
-	}
-	else {
-		translationVector = cv::readOpticalFlow("translationVector.flo");
-		calibrationVector = cv::readOpticalFlow("calibrationVector.flo");
-	}
-
-	//stereo->initializeFisheyeStereo(stereoWidth, stereoHeight, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 1, 1000);
-	stereo->initializeFisheyeStereo(stereoWidth, stereoHeight, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 1, 100);
-
-	stereo->loadVectorFields(translationVector, calibrationVector);
-	//stereo->initializeOpticalFlow(848, 800, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 3, 200);
-	stereo->visualizeResults = true;
-	stereo->flowScale = 50.0f;
-	stereo->planeSweepMaxDisparity = 120;
-	stereo->planeSweepWindow = 5;
-	stereo->planeSweepMaxError = 0.05f;
-	stereo->planeSweepStride = 1;
-	stereo->isReverse = true;
-	return 0;
-}
+//int Tslam::initStereoTVL1() {
+//	stereo = new Stereo();
+//	stereoScaling = 2.0f;
+//	stereoWidth = (int)(t265.width / stereoScaling);
+//	stereoHeight = (int)(t265.height / stereoScaling);
+//	stereo->baseline = 0.0642f;
+//	stereo->focal = 285.8557f / stereoScaling;
+//	cv::Mat translationVector, calibrationVector;
+//	if (stereoScaling == 2.0f) {
+//		translationVector = cv::readOpticalFlow("translationVectorHalf.flo");
+//		calibrationVector = cv::readOpticalFlow("calibrationVectorHalf.flo");
+//	}
+//	else {
+//		translationVector = cv::readOpticalFlow("translationVector.flo");
+//		calibrationVector = cv::readOpticalFlow("calibrationVector.flo");
+//	}
+//
+//	//stereo->initializeFisheyeStereo(stereoWidth, stereoHeight, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 1, 1000);
+//	stereo->initializeFisheyeStereo(stereoWidth, stereoHeight, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 1, 100);
+//
+//	stereo->loadVectorFields(translationVector, calibrationVector);
+//	//stereo->initializeOpticalFlow(848, 800, 1, CV_8U, 6, 2.0f, 50.0f, 0.33f, 0.125f, 3, 200);
+//	stereo->visualizeResults = true;
+//	stereo->flowScale = 50.0f;
+//	stereo->planeSweepMaxDisparity = 120;
+//	stereo->planeSweepWindow = 5;
+//	stereo->planeSweepMaxError = 0.05f;
+//	stereo->planeSweepStride = 1;
+//	stereo->isReverse = true;
+//	return 0;
+//}
