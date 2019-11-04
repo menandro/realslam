@@ -4,7 +4,8 @@ int Tslam::initialize(const char* serialNumber) {
 	viewer = new Viewer();
 
 	// Fisheye Stereo
-	initStereoTVL1();
+	//initStereoTVL1();
+	initStereoTGVL1();
 
 	// Upsampling
 	initDepthUpsampling();
@@ -186,7 +187,8 @@ int Tslam::cameraPoseSolver() {
 		cv::imwrite("fs2.png", equi2);*/
 		//visualizeKeypoints(t265, "kp");
 
-		solveStereoTVL1();
+		//solveStereoTVL1();
+		solveStereoTGVL1();
 		createDepthThresholdMask(t265, 1.0f);
 
 		//cv::Mat depthUpsample = cv::Mat(stereoHeight, upsampling->iAlignUp(stereoWidth), CV_32F);
