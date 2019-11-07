@@ -153,6 +153,8 @@ int StereoLite::initialize(int width, int height, float lambda, float theta, flo
 	checkCudaErrors(cudaMalloc(&ps_disparityFinal, dataSize32f));
 	checkCudaErrors(cudaMalloc(&ps_currentWarpForward, dataSize32fc2));
 	checkCudaErrors(cudaMalloc(&ps_warpForward, dataSize32fc2));
+	checkCudaErrors(cudaMalloc(&ps_currentWarpBackward, dataSize32fc2));
+	checkCudaErrors(cudaMalloc(&ps_warpBackward, dataSize32fc2));
 	checkCudaErrors(cudaMalloc(&ps_finalWarpForward, dataSize32fc2));
 	checkCudaErrors(cudaMalloc(&ps_grad, dataSize32f));
 	checkCudaErrors(cudaMalloc(&ps_propagatedDisparity, dataSize32f));
@@ -385,12 +387,14 @@ int StereoLite::planeSweep() {
 	SetValue(ps_error, planeSweepMaxError, pW[lvl], pH[lvl], pS[lvl]);
 	SetValue(ps_meanError, 0.0f, pW[lvl], pH[lvl], pS[lvl]);
 	for (int sweep = 0; sweep <= planeSweepMaxDisparity; sweep += planeSweepStride) {
-		PlaneSweepCorrelationGetWarp(ps_i1warp, pI0[lvl], ps_disparityForward, sweep, planeSweepWindow,
+		PlaneSweepCorrelationGetWarp(ps_i1warp, pI0[lvl], ps_disparityForward, sweep, planeSweepStride, planeSweepWindow,
 			ps_currentWarpForward, ps_warpForward, d_tvForward, pW[lvl], pH[lvl], pS[lvl], ps_error);
 		for (int psStride = 0; psStride < planeSweepStride; psStride++) {
 			WarpImage(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], d_tvForward, ps_i1warps);
 			Swap(ps_i1warp, ps_i1warps);
 		}
+		//WarpImage(pI1[lvl], pW[lvl], pH[lvl], pS[lvl], ps_warpForward, ps_i1warps);
+		//Swap(ps_i1warp, ps_i1warps);
 	}
 
 	// Backward
@@ -403,10 +407,70 @@ int StereoLite::planeSweep() {
 	for (int sweep = 0; sweep <= planeSweepMaxDisparity; sweep += planeSweepStride) {
 		PlaneSweepCorrelation(ps_i1warp, pI1[lvl], ps_disparityBackward, sweep, planeSweepWindow,
 			pW[lvl], pH[lvl], pS[lvl], ps_error);
+		/*PlaneSweepCorrelationGetWarp(ps_i1warp, pI1[lvl], ps_disparityBackward, sweep, planeSweepWindow,
+			ps_currentWarpBackward, ps_warpBackward, d_tvBackward, pW[lvl], pH[lvl], pS[lvl], ps_error);*/
 		for (int psStride = 0; psStride < planeSweepStride; psStride++) {
 			WarpImage(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], d_tvBackward, ps_i1warps);
 			Swap(ps_i1warp, ps_i1warps);
 		}
+		//WarpImage(pI0[lvl], pW[lvl], pH[lvl], pS[lvl], ps_warpBackward, ps_i1warps);
+		//Swap(ps_i1warp, ps_i1warps);
+	}
+
+	// Left-Right Consistency
+	LeftRightConsistency(ps_disparityForward, ps_disparityBackward, ps_warpForward, planeSweepEpsilon,
+		ps_disparityFinal, ps_finalWarpForward, pW[lvl], pH[lvl], pS[lvl]);
+
+	return 0;
+}
+
+int StereoLite::planeSweepSubpixel() {
+	// Forward
+	int lvl = 0;
+	WarpImage(pI1[0], width, height, stride, d_cv, d_i1calibrated);
+	Swap(pI1[0], d_i1calibrated);
+
+	checkCudaErrors(cudaMemset(ps_error, 0, dataSize32f));
+	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize32f));
+	checkCudaErrors(cudaMemset(ps_disparityForward, 0, dataSize32f));
+	checkCudaErrors(cudaMemset(ps_currentWarpForward, 0, dataSize32fc2));
+	Clone(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], pI1[lvl]);
+	SetValue(ps_error, planeSweepMaxError, pW[lvl], pH[lvl], pS[lvl]);
+	SetValue(ps_meanError, 0.0f, pW[lvl], pH[lvl], pS[lvl]);
+	for (float sweep = 0; sweep <= planeSweepMaxDisparity; sweep += planeSweepStride) {
+		PlaneSweepCorrelationGetWarp(ps_i1warp, pI0[lvl], ps_disparityForward, sweep, planeSweepStride, planeSweepWindow,
+			ps_currentWarpForward, ps_warpForward, d_tvForward, pW[lvl], pH[lvl], pS[lvl], ps_error);
+		/*for (int psStride = 0; psStride < planeSweepStride; psStride++) {
+			WarpImage(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], d_tvForward, ps_i1warps);
+			Swap(ps_i1warp, ps_i1warps);
+		}*/
+		//std::cout << sweep << std::endl;
+		WarpImage(pI1[lvl], pW[lvl], pH[lvl], pS[lvl], ps_warpForward, ps_i1warps);
+		Swap(ps_i1warp, ps_i1warps);
+		//DEBUGWARPIMAGE("dd", ps_i1warp, pH[lvl], pS[lvl], false, false);
+		//cv::waitKey(1);
+	}
+
+	// Backward
+	checkCudaErrors(cudaMemset(ps_error, 0, dataSize32f));
+	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize32f));
+	checkCudaErrors(cudaMemset(ps_disparityBackward, 0, dataSize32f));
+	checkCudaErrors(cudaMemset(ps_currentWarpBackward, 0, dataSize32fc2));
+	Clone(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], pI0[lvl]);
+	SetValue(ps_error, planeSweepMaxError, pW[lvl], pH[lvl], pS[lvl]);
+	SetValue(ps_meanError, 0.0f, pW[lvl], pH[lvl], pS[lvl]);
+	for (float sweep = 0; sweep <= planeSweepMaxDisparity; sweep += planeSweepStride) {
+		/*PlaneSweepCorrelation(ps_i1warp, pI1[lvl], ps_disparityBackward, sweep, planeSweepWindow,
+			pW[lvl], pH[lvl], pS[lvl], ps_error);*/
+		PlaneSweepCorrelationGetWarp(ps_i1warp, pI1[lvl], ps_disparityBackward, sweep, planeSweepStride, planeSweepWindow,
+			ps_currentWarpBackward, ps_warpBackward, d_tvBackward, pW[lvl], pH[lvl], pS[lvl], ps_error);
+		/*for (int psStride = 0; psStride < planeSweepStride; psStride++) {
+			WarpImage(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], d_tvBackward, ps_i1warps);
+			Swap(ps_i1warp, ps_i1warps);
+		}*/
+		WarpImage(pI0[lvl], pW[lvl], pH[lvl], pS[lvl], ps_warpBackward, ps_i1warps);
+		Swap(ps_i1warp, ps_i1warps);
+		
 	}
 
 	// Left-Right Consistency
@@ -449,6 +513,24 @@ int StereoLite::copyPlanesweepFinalToHost(cv::Mat &wCropped) {
 	checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_depth, dataSize32f, cudaMemcpyDeviceToHost));
 	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
 	wCropped = depth(roi);
+	return 0;
+}
+
+int StereoLite::copyPlanesweepDisparityToHost(cv::Mat &wCropped) {
+	// Remove Padding
+	//checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_w, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy((float2 *)warpUV.ptr(), ps_finalWarpForward, dataSize32fc2, cudaMemcpyDeviceToHost));
+	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
+	wCropped = warpUV(roi);
+	return 0;
+}
+
+int StereoLite::copyPlanesweepDisparityVisToHost(cv::Mat &wCropped, float flowScale) {
+	// Remove Padding
+	FlowToHSV(ps_finalWarpForward, width, height, stride, d_uvrgb, flowScale);
+	checkCudaErrors(cudaMemcpy((float3 *)warpUVrgb.ptr(), d_uvrgb, dataSize32fc3, cudaMemcpyDeviceToHost));
+	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
+	wCropped = warpUVrgb(roi);
 	return 0;
 }
 

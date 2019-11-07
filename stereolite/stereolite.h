@@ -100,12 +100,15 @@ public:
 	int copyPlanesweepForwardToHost(cv::Mat &wCropped);
 	int copyPlanesweepBackwardToHost(cv::Mat &wCropped);
 	int copyPlanesweepFinalToHost(cv::Mat &wCropped);
+	int copyPlanesweepDisparityToHost(cv::Mat &wCropped);
 	int copyPropagatedDisparityToHost(cv::Mat &wCropped);
+	int copyPlanesweepDisparityVisToHost(cv::Mat &wCropped, float flowScale);
 
 	// Planesweep
 	int planeSweepForward();
 	int planeSweepBackward();
 	int planeSweep();
+	int planeSweepSubpixel();
 	float * ps_i1warp;
 	float * ps_i1warps;
 	float * ps_error;
@@ -118,6 +121,8 @@ public:
 	float * ps_disparityFinal;
 	float2 * ps_currentWarpForward; // Holds warping vector for every step
 	float2 * ps_warpForward; // Holds warping vector of max correlation
+	float2 * ps_currentWarpBackward; // Holds warping vector for every step
+	float2 * ps_warpBackward; // Holds warping vector of max correlation
 	float2 * ps_finalWarpForward; // Holds warping vector with left-right consistency
 	float* ps_grad;
 	float* ps_propagatedDisparity;
@@ -126,7 +131,7 @@ public:
 	int planeSweepMaxDisparity;
 	int planeSweepWindow;
 	float planeSweepMaxError;
-	int planeSweepStride;
+	float planeSweepStride;
 	float planeSweepEpsilon = 1.0f;
 	cv::Mat planeSweepDepth;
 	int maxPropIter = 1;
@@ -151,9 +156,9 @@ public:
 	// Planesweep
 	void LeftRightConsistency(float *disparityForward, float* disparityBackward, float2* warpingVector,
 		float epsilon, float* disparityFinal, float2* finalWarpForward, int w, int h, int s);
-	void PlaneSweepCorrelationGetWarp(float *i0, float *i1, float* disparity, int sweepDistance, int windowSize,
+	void PlaneSweepCorrelationGetWarp(float *i0, float *i1, float* disparity, float sweepDistance, float sweepStride, int windowSize,
 		float2* currentWarp, float2* finalWarp, float2 * translationVector, int w, int h, int s, float *error);
-	void PlaneSweepCorrelation(float *i0, float *i1, float* disparity, int sweepDistance, int windowSize,
+	void PlaneSweepCorrelation(float *i0, float *i1, float* disparity, float sweepDistance, int windowSize,
 		int w, int h, int s, float *error);
 	void SetValue(float *image, float value, int w, int h, int s);
 	void PropagateColorOnly(float* grad, float* lidar, float2* warpUV, float2* warpUVOut, float* depthOut, int radius);

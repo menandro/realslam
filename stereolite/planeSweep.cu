@@ -54,7 +54,7 @@ void LitePlaneSweepMeanCleanup(float* error, float* meanError, float standardDev
 
 // Window-based SAD
 __global__
-void LitePlaneSweepCorrelationKernel(float* imError, float* disparity, int sweepDistance, int maxDisparity,
+void LitePlaneSweepCorrelationKernel(float* imError, float* disparity, float sweepDistance, int maxDisparity,
 	int windowSize, int width, int height, int stride, float *error, float *meanError)
 {
 	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
@@ -92,7 +92,7 @@ void LitePlaneSweepCorrelationKernel(float* imError, float* disparity, int sweep
 
 }
 
-void StereoLite::PlaneSweepCorrelation(float *i0, float *i1, float* disparity, int sweepDistance, int windowSize,
+void StereoLite::PlaneSweepCorrelation(float *i0, float *i1, float* disparity, float sweepDistance, int windowSize,
 	int w, int h, int s, float *error)
 {
 	dim3 threads(BlockWidth, BlockHeight);
@@ -109,7 +109,7 @@ void StereoLite::PlaneSweepCorrelation(float *i0, float *i1, float* disparity, i
 
 // Window-based SAD with warping vector fetch for left-right consistency calculation
 __global__
-void LitePlaneSweepCorrelationGetWarpKernel(float* imError, float* disparity, int sweepDistance, int maxDisparity,
+void LitePlaneSweepCorrelationGetWarpKernel(float* imError, float* disparity, float sweepDistance, float sweepStride, int maxDisparity,
 	int windowSize, float2* currentWarp, float2 * finalWarp, float2* tv,
 	int width, int height, int stride, float *error, float *meanError)
 {
@@ -120,8 +120,10 @@ void LitePlaneSweepCorrelationGetWarpKernel(float* imError, float* disparity, in
 
 	if (ix >= width || iy >= height) return;
 
-	currentWarp[pos].x = currentWarp[pos].x + tv[pos].x;
-	currentWarp[pos].y = currentWarp[pos].y + tv[pos].y;
+	float2 currWarp;
+	currWarp.x = currentWarp[pos].x + sweepStride * tv[pos].x;
+	currWarp.y = currentWarp[pos].y + sweepStride * tv[pos].y;
+	currentWarp[pos] = currWarp;
 
 	float currError = 0.0f;
 	int windowCount = 0;
@@ -137,7 +139,9 @@ void LitePlaneSweepCorrelationGetWarpKernel(float* imError, float* disparity, in
 		}
 	}
 	currError = currError / windowCount;
-	meanError[pos] = ((float)sweepDistance * meanError[pos] + currError) / ((float)sweepDistance + 1.0f);
+	meanError[pos] = (sweepDistance * meanError[pos] + currError) / (sweepDistance + 1.0f);
+	//meanError[pos] = (meanError[pos] + currError) / (1.0f + 1.0f);
+	
 	if (currError < error[pos]) {
 		/*if (sweepDistance == maxDisparity) {
 			error[pos] = 0.0f;
@@ -146,14 +150,14 @@ void LitePlaneSweepCorrelationGetWarpKernel(float* imError, float* disparity, in
 		}
 		else {*/
 			error[pos] = currError;
-			disparity[pos] = (float)sweepDistance;
-			finalWarp[pos] = currentWarp[pos];
+			disparity[pos] = sweepDistance;
+			finalWarp[pos] = currWarp;
 		//}
 	}
 }
 
 
-void StereoLite::PlaneSweepCorrelationGetWarp(float *i0, float *i1, float* disparity, int sweepDistance, int windowSize,
+void StereoLite::PlaneSweepCorrelationGetWarp(float *i0, float *i1, float* disparity, float sweepDistance, float sweepStride, int windowSize,
 	float2* currentWarp, float2* finalWarp, float2 * translationVector, int w, int h, int s, float *error)
 {
 	dim3 threads(BlockWidth, BlockHeight);
@@ -162,8 +166,10 @@ void StereoLite::PlaneSweepCorrelationGetWarp(float *i0, float *i1, float* dispa
 	/*LitePlaneSweepCorrelationGetWarpKernel << <blocks, threads >> > (i0, i1, disparity, sweepDistance, windowSize, 
 		currentWarp, finalWarp, translationVector, w, h, s, error);*/
 	LitePlaneSweepGetErrorKernel << < blocks, threads >> > (i0, i1, w, h, s, ps_errorHolder);
-	LitePlaneSweepCorrelationGetWarpKernel << <blocks, threads >> > (ps_errorHolder, disparity, sweepDistance, 
+
+	LitePlaneSweepCorrelationGetWarpKernel << <blocks, threads >> > (ps_errorHolder, disparity, sweepDistance, sweepStride,
 		planeSweepMaxDisparity, windowSize, currentWarp, finalWarp, translationVector, w, h, s, error, ps_meanError);
+
 	LitePlaneSweepMeanCleanup << < blocks, threads >> > (error, ps_meanError, planeSweepStandardDev, disparity, finalWarp, 
 		w, h, s);
 }

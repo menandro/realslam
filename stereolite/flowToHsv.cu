@@ -1,7 +1,7 @@
 #include "stereolite.h"
 
 __global__
-void ComputeColorKernel(float2 *uv, int width, int height, int stride, float3 *uvRGB, float flowscale) {
+void LiteComputeColorKernel(float2 *uv, int width, int height, int stride, float3 *uvRGB, float flowscale) {
 	int r = blockIdx.y * blockDim.y + threadIdx.y;        // current row 
 	int c = blockIdx.x * blockDim.x + threadIdx.x;        // current column 
 
@@ -117,5 +117,5 @@ void StereoLite::FlowToHSV(float2* uv, int w, int h, int s, float3 * uRGB, float
 	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
 
 	//flowToHSVKernel << < blocks, threads >> >(u, v, w, h, s, uRGB, flowscale);
-	ComputeColorKernel << < blocks, threads >> > (uv, w, h, s, uRGB, flowscale);
+	LiteComputeColorKernel << < blocks, threads >> > (uv, w, h, s, uRGB, flowscale);
 }

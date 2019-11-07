@@ -1,8 +1,10 @@
 #include "main.h"
 
 int main(void) {
+	test_FaroDataAllPlanesweep();
+	//test_FaroDataAll();
 	//test_VehicleSegmentationSequence();
-	test_VehicleSegmentation();
+	//test_VehicleSegmentation();
 	//test_PlaneSweepWithTvl1();
 	//test_ImageSequencePlanesweep();
 	//test_PlaneSweep();

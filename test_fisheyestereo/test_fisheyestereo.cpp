@@ -1,5 +1,165 @@
 #include "main.h"
 
+int test_FaroDataAllPlanesweep() {
+	std::string folder = "h:/data_icra/";
+	StereoLite * stereotgv = new StereoLite();
+	int width = 800;
+	int height = 800;
+	int nLevel = 5;
+	float fScale = 2.0f;
+	int nWarpIters = 10;
+	int nSolverIters = 5;
+	float lambda = 1.0f;
+	float theta = 0.33f;
+	float tau = 0.125f;
+	stereotgv->limitRange = 0.2f;
+	stereotgv->planeSweepMaxError = 1000.0f;
+	stereotgv->planeSweepMaxDisparity = (int)(50.0f);
+	stereotgv->planeSweepStride = 0.1f;
+	stereotgv->planeSweepWindow = 9;
+	stereotgv->planeSweepEpsilon = 1.0f;
+	//int upsamplingRadius = 5;
+	stereotgv->maxPropIter = 3;
+	stereotgv->l2lambda = 1.0f;
+	stereotgv->l2iter = 500;
+	stereotgv->planeSweepStandardDev = 1.0f;
+
+	int stereoWidth = width;
+	int stereoHeight = height;
+	stereotgv->baseline = 0.0642f;
+	stereotgv->focal = 285.8557f;
+	cv::Mat translationVector, calibrationVector;
+	
+	stereotgv->initialize(stereoWidth, stereoHeight, lambda, theta, tau, nLevel, fScale, nWarpIters, nSolverIters);
+
+	// Load fisheye Mask
+	cv::Mat mask = cv::Mat::zeros(cv::Size(width, height), CV_8UC1);
+	circle(mask, cv::Point(width / 2, height / 2), width / 2 - 10, cv::Scalar(256.0f), -1);
+	cv::Mat fisheyeMask;
+	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
+	stereotgv->copyMaskToDevice(fisheyeMask);
+
+	cv::Mat halfFisheye1, halfFisheye2;
+	cv::Mat equi1, equi2;
+
+	clock_t avetime = 0;
+
+	for (int k = 81; k <= 224; k++) {
+		std::string filename = "im" + std::to_string(k);
+		std::string outputFilename = folder + "outputplanesweep/" + filename + ".flo";
+		cv::Mat im1 = cv::imread(folder + "image_02/data/" + filename + ".png");
+		cv::Mat im2 = cv::imread(folder + "image_03/data/" + filename + ".png");
+		cv::Mat equi1, equi2;
+		cv::cvtColor(im1, im1, cv::COLOR_BGR2GRAY);
+		cv::cvtColor(im2, im2, cv::COLOR_BGR2GRAY);
+		cv::equalizeHist(im1, equi1);
+		cv::equalizeHist(im2, equi2);
+		int stereoWidth = width;
+		int stereoHeight = height;
+		cv::Mat translationVector = cv::readOpticalFlow(folder + "translationVector/" + filename + ".flo");
+		cv::Mat calibrationVector = cv::readOpticalFlow(folder + "calibrationVector/" + filename + ".flo");
+
+		// Load vector fields
+		stereotgv->loadVectorFields(translationVector, calibrationVector);
+
+		// Solve stereo depth
+		cv::equalizeHist(im1, equi1);
+		cv::equalizeHist(im2, equi2);
+
+		cv::Mat disparity = cv::Mat(stereoHeight, stereoWidth, CV_32FC2);
+
+		stereotgv->copyImagesToDevice(equi1, equi2);
+		//stereotgv->planeSweep();
+		stereotgv->planeSweepSubpixel();
+		
+		cv::Mat disparityVis = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+		stereotgv->copyPlanesweepDisparityVisToHost(disparityVis, 50.0f);
+		cv::imshow("flow", disparityVis);
+
+		stereotgv->copyPlanesweepDisparityToHost(disparity);
+		cv::writeOpticalFlow(outputFilename, disparity);
+
+		cv::waitKey(1);
+	}
+	cv::waitKey();
+	return 0;
+}
+
+int test_FaroDataAll() {
+	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
+	std::string folder = "h:/data_icra/";
+	
+	StereoTgv * stereotgv = new StereoTgv();
+	int width = 800;
+	int height = 800;
+	float stereoScaling = 1.0f;
+	int nLevel = 11;
+	float fScale = 1.2f;
+	int nWarpIters = 100;
+	int nSolverIters = 50;
+	float lambda = 5.0f;
+	stereotgv->limitRange = 0.1f;
+	float beta = 9.0f;//4.0f;
+	float gamma = 0.85f;// 0.2f;
+	float alpha0 = 17.0f;// 5.0f;
+	float alpha1 = 1.2f;// 1.0f;
+	float timeStepLambda = 1.0f;
+
+	stereotgv->initialize(width, height, beta, gamma, alpha0, alpha1,
+		timeStepLambda, lambda, nLevel, fScale, nWarpIters, nSolverIters);
+	stereotgv->visualizeResults = true;
+
+	cv::Mat mask = cv::Mat::zeros(cv::Size(width, height), CV_8UC1);
+	circle(mask, cv::Point(width / 2, height / 2), width / 2 - 10, cv::Scalar(256.0f), -1);
+	cv::Mat fisheyeMask;
+	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
+	stereotgv->copyMaskToDevice(fisheyeMask);
+
+	for (int k = 100; k <= 100; k++) {
+		std::string filename = "im" + std::to_string(k);
+		std::string outputFilename = folder + "output/" + filename + ".flo";
+		cv::Mat im1 = cv::imread(folder + "image_02/data/" + filename + ".png");
+		cv::Mat im2 = cv::imread(folder + "image_03/data/" + filename + ".png");
+		cv::Mat equi1, equi2;
+		cv::cvtColor(im1, im1, cv::COLOR_BGR2GRAY);
+		cv::cvtColor(im2, im2, cv::COLOR_BGR2GRAY);
+		cv::equalizeHist(im1, equi1);
+		cv::equalizeHist(im2, equi2);
+		int stereoWidth = width;
+		int stereoHeight = height;
+		cv::Mat translationVector = cv::readOpticalFlow(folder + "translationVector/" + filename + ".flo");
+		cv::Mat calibrationVector = cv::readOpticalFlow(folder + "calibrationVector/" + filename + ".flo");
+		
+		stereotgv->loadVectorFields(translationVector, calibrationVector);
+
+		stereotgv->copyImagesToDevice(equi1, equi2);
+		stereotgv->solveStereoForwardMasked();
+
+		cv::Mat disparityVis = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+		stereotgv->copyDisparityVisToHost(disparityVis, 50.0f);
+		cv::imshow("flow", disparityVis);
+
+		cv::Mat disparity = cv::Mat(stereoHeight, stereoWidth, CV_32FC2);
+		stereotgv->copyDisparityToHost(disparity);
+		cv::writeOpticalFlow(outputFilename, disparity);
+		// convert disparity to 3D (depends on the model)
+
+		cv::Mat depthVis;
+		cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+		stereotgv->copyStereoToHost(depth);
+		depth.copyTo(depthVis, mask);
+		//showDepthJet("color", depthVis, 5.0f, false);
+
+		cv::Mat warped;
+		stereotgv->copyWarpedImageToHost(warped);
+		//cv::imshow("right", equi2);
+		//cv::imshow("left", equi1);
+		cv::imshow("warped", warped);
+		cv::waitKey(1);
+	}
+	return 0;
+}
+
 int test_VehicleSegmentationSequence() {
 	std::string mainfolder = "h:/data_rs_iis/20190913_1";
 	std::string outputfolder = "/segmented";
@@ -1118,8 +1278,8 @@ int test_LimitingRange() {
 
 int test_FaroData() {
 	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
-	std::string folder = "d:/data/data_icra/";
-	std::string filename = "im92";
+	std::string folder = "h:/data_icra/";
+	std::string filename = "im146";
 	std::string outputFilename = folder + "output/" + filename + ".flo";
 	cv::Mat im1 = cv::imread(folder + "image_02/data/" + filename + ".png");
 	cv::Mat im2 = cv::imread(folder + "image_03/data/" + filename + ".png");
