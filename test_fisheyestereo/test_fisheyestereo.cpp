@@ -1131,18 +1131,23 @@ int test_ImageSequence(std::string mainfolder, int startFrame, int endFrame) {
 		cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
 		cv::Mat depthVis;
 		stereotgv->copyStereoToHost(depth);
+
 		clock_t timeElapsed = (clock() - start);
-		std::cout << "time: " << timeElapsed << " ms " ;
+		
 		//stereotgv->copy1DDisparityToHost(depth);
 		depth.copyTo(depthVis, mask);
-		showDepthJetExponential("color", depthVis, maxDepthVis, false);
+		showDepthJetExponential("color", depthVis, maxDepthVis, 0.1f, false);
 		
 		std::string appender;
 		if (k < 10) appender = "000";
 		else if ((k >= 10) && (k < 100)) appender = "00";
 		else if ((k >= 100) && (k < 1000)) appender = "0";
 		else appender = "";
-		saveDepthJet(mainfolder + "/error/ours/im" + appender + std::to_string(k) + ".png", depthVis, 5.0f);
+
+		cv::Mat depth16;
+		depthVis.convertTo(depth16, CV_16U, 256.0f);
+		cv::imwrite(mainfolder + "/output/im" + appender + std::to_string(k) + ".png", depth16);
+		saveDepthJetExponential(mainfolder + "/error/ours/im" + appender + std::to_string(k) + ".png", depthVis, maxDepthVis, 0.1f);
 		//saveDepthJet("h:/data_rs_iis/20190909/output1ddisparity/im" + std::to_string(k) + ".png", depthVis, 30.0f);
 		/*cv::Mat imout;
 		im1.copyTo(imout, fisheyeMask8);
@@ -1620,19 +1625,31 @@ void showDepthJet(std::string windowName, cv::Mat image, float maxDepth, bool sh
 	if (shouldWait) cv::waitKey();
 }
 
-void showDepthJetExponential(std::string windowName, cv::Mat image, float maxDepth, bool shouldWait = true) {
+void showDepthJetExponential(std::string windowName, cv::Mat image, float maxDepth, float curve, bool shouldWait = true) {
 	cv::Mat u_norm, u_exp, u_gray, u_color;
-	std::cout << image.at<float>(400, 400) << std::endl;
+	//std::cout << image.at<float>(400, 400) << std::endl;
 	u_norm = image / maxDepth;
-	std::cout << u_norm.at<float>(400, 400) << std::endl;
-	float curver = 0.1f;
-	u_exp = 1.0f - curver / (curver + u_norm);
+	//std::cout << u_norm.at<float>(400, 400) << std::endl;
+	//float curver = 0.1f;
+	u_exp = 1.0f - curve / (curve + u_norm);
 	u_exp = u_exp * 255.0f;
 	u_exp.convertTo(u_gray, CV_8UC1);
 	cv::applyColorMap(u_gray, u_color, cv::COLORMAP_JET);
 
 	cv::imshow(windowName, u_color);
 	if (shouldWait) cv::waitKey();
+}
+void saveDepthJetExponential(std::string fileName, cv::Mat image, float maxDepth, float curve) {
+	cv::Mat u_norm, u_exp, u_gray, u_color;
+	u_norm = image / maxDepth;
+	//std::cout << u_norm.at<float>(400, 400) << std::endl;
+	//float curver = 0.1f;
+	u_exp = 1.0f - curve / (curve + u_norm);
+	u_exp = u_exp * 255.0f;
+	u_exp.convertTo(u_gray, CV_8UC1);
+	cv::applyColorMap(u_gray, u_color, cv::COLORMAP_JET);
+
+	cv::imwrite(fileName, u_color);
 }
 
 void saveDepthJet(std::string fileName, cv::Mat image, float maxDepth) {

@@ -57,6 +57,7 @@ int test_FaroData();
 int test_BlenderData();
 int test_IcraAddedAccuratePixels();
 void showDepthJet(std::string windowName, cv::Mat image, float maxDepth, bool shouldWait);
-void showDepthJetExponential(std::string windowName, cv::Mat image, float maxDepth, bool shouldWait);
+void showDepthJetExponential(std::string windowName, cv::Mat image, float maxDepth, float curve, bool shouldWait);
+void saveDepthJetExponential(std::string fileName, cv::Mat image, float maxDepth, float curve);
 void saveDepthJet(std::string fileName, cv::Mat image, float maxDepth);
 int test_TwoImagesRealsense();
