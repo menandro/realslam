@@ -1,5 +1,85 @@
 #include "main.h"
 
+int test_BlenderDataAllPlanesweep() {
+	std::string folder = "h:/blender/icra2020/";
+	StereoLite * stereotgv = new StereoLite();
+	int width = 800;
+	int height = 800;
+	int nLevel = 5;
+	float fScale = 2.0f;
+	int nWarpIters = 10;
+	int nSolverIters = 5;
+	float lambda = 1.0f;
+	float theta = 0.33f;
+	float tau = 0.125f;
+	stereotgv->limitRange = 0.2f;
+	stereotgv->planeSweepMaxError = 1000.0f;
+	stereotgv->planeSweepMaxDisparity = (int)(50.0f);
+	stereotgv->planeSweepStride = 0.05f;
+	stereotgv->planeSweepWindow = 11;
+	stereotgv->planeSweepEpsilon = 1.0f;
+	//int upsamplingRadius = 5;
+	stereotgv->maxPropIter = 3;
+	stereotgv->l2lambda = 1.0f;
+	stereotgv->l2iter = 500;
+	stereotgv->planeSweepStandardDev = 1.0f;
+
+	int stereoWidth = width;
+	int stereoHeight = height;
+	stereotgv->baseline = 0.0642f;
+	stereotgv->focal = 285.8557f;
+
+	stereotgv->initialize(stereoWidth, stereoHeight, lambda, theta, tau, nLevel, fScale, nWarpIters, nSolverIters);
+
+	// Load fisheye Mask
+	cv::Mat mask = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_8UC1);
+	circle(mask, cv::Point(stereoWidth / 2, stereoHeight / 2), stereoWidth / 2 - 50, cv::Scalar(256.0f), -1);
+	cv::Mat fisheyeMask;
+	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
+	stereotgv->copyMaskToDevice(fisheyeMask);
+
+	// Load vector fields
+	cv::Mat translationVector = cv::readOpticalFlow(folder + "/translationVectorBlender.flo");
+	cv::Mat calibrationVector = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_32FC2);
+	stereotgv->loadVectorFields(translationVector, calibrationVector);
+
+	cv::Mat halfFisheye1, halfFisheye2;
+	cv::Mat equi1, equi2;
+
+	clock_t avetime = 0;
+	cv::Mat disparity = cv::Mat(stereoHeight, stereoWidth, CV_32FC2);
+
+	for (int k = 1; k <= 300; k++) {
+		std::string appender;
+		if (k < 10) appender = "000";
+		else if ((k >= 10) && (k < 100)) appender = "00";
+		else if ((k >= 100) && (k < 1000)) appender = "0";
+		else appender = "";
+		std::string outputFilename = folder + "/outputplanesweep/" + appender + std::to_string(k) + ".flo";
+		cv::Mat im1 = cv::imread(folder + "/left/" + appender + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
+		cv::Mat im2 = cv::imread(folder + "/right/" + appender + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
+
+		// Solve stereo depth
+		cv::equalizeHist(im1, equi1);
+		cv::equalizeHist(im2, equi2);
+
+		stereotgv->copyImagesToDevice(equi1, equi2);
+		//stereotgv->planeSweep();
+		stereotgv->planeSweepSubpixel();
+
+		cv::Mat disparityVis = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+		stereotgv->copyPlanesweepDisparityVisToHost(disparityVis, 10.0f);
+		cv::imshow("flow", disparityVis);
+
+		stereotgv->copyPlanesweepDisparityToHost(disparity);
+		cv::writeOpticalFlow(outputFilename, disparity);
+
+		cv::waitKey(1);
+	}
+	cv::waitKey();
+	return 0;
+}
+
 int test_FaroDataAllPlanesweep() {
 	std::string folder = "h:/data_icra/";
 	StereoLite * stereotgv = new StereoLite();
@@ -953,18 +1033,19 @@ int test_ImageSequenceLite() {
 	return 0;
 }
 
-int test_ImageSequence() {
-	std::string mainfolder = "h:/data_rs_iis/20190913_1";
+int test_ImageSequence(std::string mainfolder, int startFrame, int endFrame) {
+	//std::string mainfolder = "h:/data_rs_iis/20191108_20";
 	StereoTgv * stereotgv = new StereoTgv();
 	int width = 848;
 	int height = 800;
-	float stereoScaling = 2.0f;
-	int nLevel = 4;
-	float fScale = 2.0f;
-	int nWarpIters = 10;
-	int nSolverIters = 20;
+	float stereoScaling = 1.0f;
+	int nLevel = 11;
+	float fScale = 1.2f;// 2.0f;
+	int nWarpIters = 400;// 10;
+	int nSolverIters = 20;// 20;
 	float lambda = 5.0f;
-	stereotgv->limitRange = 0.2f;
+	stereotgv->limitRange = 0.1f;
+	float maxDepthVis = 20.0f;
 
 	int stereoWidth = (int)((float)width / stereoScaling);
 	int stereoHeight = (int)((float)height / stereoScaling);
@@ -972,12 +1053,12 @@ int test_ImageSequence() {
 	stereotgv->focal = 285.8557f / stereoScaling;
 	cv::Mat translationVector, calibrationVector;
 	if (stereoScaling == 2.0f) {
-		translationVector = cv::readOpticalFlow("../test_rstracking/translationVectorHalf.flo");
-		calibrationVector = cv::readOpticalFlow("../test_rstracking/calibrationVectorHalf.flo");
+		translationVector = cv::readOpticalFlow("h:/data_rs_iis/translationVectorHalf.flo");
+		calibrationVector = cv::readOpticalFlow("h:/data_rs_iis/calibrationVectorHalf.flo");
 	}
 	else {
-		translationVector = cv::readOpticalFlow("../test_rstracking/translationVector.flo");
-		calibrationVector = cv::readOpticalFlow("../test_rstracking/calibrationVector.flo");
+		translationVector = cv::readOpticalFlow("h:/data_rs_iis/translationVector.flo");
+		calibrationVector = cv::readOpticalFlow("h:/data_rs_iis/calibrationVector.flo");
 	}
 
 	float beta = 4.0f;
@@ -1016,7 +1097,7 @@ int test_ImageSequence() {
 	cv::Mat halfFisheye1, halfFisheye2;
 	cv::Mat equi1, equi2;
 	
-	for (int k = 0; k <= 1274; k++) {
+	for (int k = startFrame; k <= endFrame; k++) {
 		cv::Mat im1 = cv::imread(mainfolder + "/colored_0/data/im" + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
 		cv::Mat im2 = cv::imread(mainfolder + "/colored_1/data/im" + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
 
@@ -1054,14 +1135,14 @@ int test_ImageSequence() {
 		std::cout << "time: " << timeElapsed << " ms " ;
 		//stereotgv->copy1DDisparityToHost(depth);
 		depth.copyTo(depthVis, mask);
-		showDepthJet("color", depthVis, 3.0f, false);
+		showDepthJetExponential("color", depthVis, maxDepthVis, false);
 		
 		std::string appender;
 		if (k < 10) appender = "000";
 		else if ((k >= 10) && (k < 100)) appender = "00";
 		else if ((k >= 100) && (k < 1000)) appender = "0";
 		else appender = "";
-		saveDepthJet(mainfolder + "/tgvl1_10fps_half/im" + appender + std::to_string(k) + ".png", depthVis, 5.0f);
+		saveDepthJet(mainfolder + "/error/ours/im" + appender + std::to_string(k) + ".png", depthVis, 5.0f);
 		//saveDepthJet("h:/data_rs_iis/20190909/output1ddisparity/im" + std::to_string(k) + ".png", depthVis, 30.0f);
 		/*cv::Mat imout;
 		im1.copyTo(imout, fisheyeMask8);
@@ -1531,8 +1612,23 @@ int test_IcraAddedAccuratePixels() {
 
 void showDepthJet(std::string windowName, cv::Mat image, float maxDepth, bool shouldWait = true) {
 	cv::Mat u_norm, u_gray, u_color;
-	u_norm = image * 256.0f / maxDepth;
+	u_norm = image * 255.0f / maxDepth;
 	u_norm.convertTo(u_gray, CV_8UC1);
+	cv::applyColorMap(u_gray, u_color, cv::COLORMAP_JET);
+
+	cv::imshow(windowName, u_color);
+	if (shouldWait) cv::waitKey();
+}
+
+void showDepthJetExponential(std::string windowName, cv::Mat image, float maxDepth, bool shouldWait = true) {
+	cv::Mat u_norm, u_exp, u_gray, u_color;
+	std::cout << image.at<float>(400, 400) << std::endl;
+	u_norm = image / maxDepth;
+	std::cout << u_norm.at<float>(400, 400) << std::endl;
+	float curver = 0.1f;
+	u_exp = 1.0f - curver / (curver + u_norm);
+	u_exp = u_exp * 255.0f;
+	u_exp.convertTo(u_gray, CV_8UC1);
 	cv::applyColorMap(u_gray, u_color, cv::COLORMAP_JET);
 
 	cv::imshow(windowName, u_color);
@@ -1541,7 +1637,7 @@ void showDepthJet(std::string windowName, cv::Mat image, float maxDepth, bool sh
 
 void saveDepthJet(std::string fileName, cv::Mat image, float maxDepth) {
 	cv::Mat u_norm, u_gray, u_color;
-	u_norm = image * 256.0f / maxDepth;
+	u_norm = image * 255.0f / maxDepth;
 	u_norm.convertTo(u_gray, CV_8UC1);
 	cv::applyColorMap(u_gray, u_color, cv::COLORMAP_JET);
 

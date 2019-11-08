@@ -783,7 +783,7 @@ void Tslam::testStereo(std::string im1fn, std::string im2fn) {
 	cv::waitKey();
 }
 
-int Tslam::saveT265Images(const char* filename, std::string folderOutput) {
+int Tslam::saveT265Images(std::string filename, std::string folderOutput) {
 	try {
 		rs2::pipeline pipe;
 		rs2::config cfg;
@@ -791,6 +791,8 @@ int Tslam::saveT265Images(const char* filename, std::string folderOutput) {
 		cfg.enable_device_from_file(filename, false);
 		cfg.enable_stream(RS2_STREAM_FISHEYE, 1, 848, 800, rs2_format::RS2_FORMAT_Y8, 30);
 		cfg.enable_stream(RS2_STREAM_FISHEYE, 2, 848, 800, rs2_format::RS2_FORMAT_Y8, 30);
+		//cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 62);
+		//cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200);
 
 		rs2::pipeline_profile profiles = pipe.start(cfg);
 		rs2::device device = profiles.get_device();

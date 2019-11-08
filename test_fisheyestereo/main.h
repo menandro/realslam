@@ -37,6 +37,7 @@
 #pragma comment(lib, LIB_PATH "opencv_cudaimgproc" CV_VER_NUM LIB_EXT)
 #pragma comment(lib, LIB_PATH "opencv_video" CV_VER_NUM LIB_EXT)
 
+int test_BlenderDataAllPlanesweep();
 int test_FaroDataAllPlanesweep();
 int test_FaroDataAll();
 int test_VehicleSegmentationSequence();
@@ -48,7 +49,7 @@ int test_StereoLiteTwoFrames(int nLevel, float fScale, int nWarpIters, int nSolv
 int test_TwoFrames(int nLevel, float fScale, int nWarpIters, int nSolverIters);
 int test_LimitingRangeOne();
 int test_BlenderDataSequence();
-int test_ImageSequence();
+int test_ImageSequence(std::string mainfolder, int startFrame, int endFrame);
 int test_ImageSequenceLite();
 int test_Timing(int warpIteration);
 int test_LimitingRange();
@@ -56,5 +57,6 @@ int test_FaroData();
 int test_BlenderData();
 int test_IcraAddedAccuratePixels();
 void showDepthJet(std::string windowName, cv::Mat image, float maxDepth, bool shouldWait);
+void showDepthJetExponential(std::string windowName, cv::Mat image, float maxDepth, bool shouldWait);
 void saveDepthJet(std::string fileName, cv::Mat image, float maxDepth);
 int test_TwoImagesRealsense();
