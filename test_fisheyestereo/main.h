@@ -43,7 +43,7 @@ int test_FaroDataAll();
 int test_VehicleSegmentationSequence();
 int test_VehicleSegmentation();
 int test_PlaneSweepWithTvl1();
-int test_ImageSequencePlanesweep();
+int test_ImageSequencePlanesweep(std::string mainfolder, int startFrame, int endFrame);
 int test_PlaneSweep();
 int test_StereoLiteTwoFrames(int nLevel, float fScale, int nWarpIters, int nSolverIters);
 int test_TwoFrames(int nLevel, float fScale, int nWarpIters, int nSolverIters);

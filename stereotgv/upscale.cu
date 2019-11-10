@@ -1,8 +1,8 @@
 #include "stereotgv.h"
 
 /// scalar field to upscale
-texture<float, cudaTextureType2D, cudaReadModeElementType> texCoarse;
-texture<float2, cudaTextureType2D, cudaReadModeElementType> texCoarseFloat2;
+texture<float, cudaTextureType2D, cudaReadModeElementType> tgvTexCoarse;
+texture<float2, cudaTextureType2D, cudaReadModeElementType> tgvTtexCoarseFloat2;
 
 __global__ 
 void TgvUpscaleKernel(int width, int height, int stride, float scale, float *out)
@@ -17,7 +17,7 @@ void TgvUpscaleKernel(int width, int height, int stride, float scale, float *out
 
 	// exploit hardware interpolation
 	// and scale interpolated vector to match next pyramid level resolution
-	out[ix + iy * stride] = tex2D(texCoarse, x, y) * scale;
+	out[ix + iy * stride] = tex2D(tgvTexCoarse, x, y) * scale;
 }
 
 void StereoTgv::Upscale(const float *src, int width, int height, int stride,
@@ -27,14 +27,14 @@ void StereoTgv::Upscale(const float *src, int width, int height, int stride,
 	dim3 blocks(iDivUp(newWidth, threads.x), iDivUp(newHeight, threads.y));
 
 	// mirror if a coordinate value is out-of-range
-	texCoarse.addressMode[0] = cudaAddressModeMirror;
-	texCoarse.addressMode[1] = cudaAddressModeMirror;
-	texCoarse.filterMode = cudaFilterModeLinear;
-	texCoarse.normalized = true;
+	tgvTexCoarse.addressMode[0] = cudaAddressModeMirror;
+	tgvTexCoarse.addressMode[1] = cudaAddressModeMirror;
+	tgvTexCoarse.filterMode = cudaFilterModeLinear;
+	tgvTexCoarse.normalized = true;
 
 	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
 
-	cudaBindTexture2D(0, texCoarse, src, width, height, stride * sizeof(float));
+	cudaBindTexture2D(0, tgvTexCoarse, src, width, height, stride * sizeof(float));
 
 	TgvUpscaleKernel << < blocks, threads >> > (newWidth, newHeight, newStride, scale, out);
 }
@@ -55,7 +55,7 @@ __global__ void TgvUpscaleFloat2Kernel(int width, int height, int stride, float 
 
 	// exploit hardware interpolation
 	// and scale interpolated vector to match next pyramid level resolution
-	float2 src = tex2D(texCoarseFloat2, x, y);
+	float2 src = tex2D(tgvTtexCoarseFloat2, x, y);
 	out[ix + iy * stride].x = src.x * scale;
 	out[ix + iy * stride].y = src.y * scale;
 }
@@ -67,14 +67,14 @@ void StereoTgv::Upscale(const float2 *src, int width, int height, int stride,
 	dim3 blocks(iDivUp(newWidth, threads.x), iDivUp(newHeight, threads.y));
 
 	// mirror if a coordinate value is out-of-range
-	texCoarseFloat2.addressMode[0] = cudaAddressModeMirror;
-	texCoarseFloat2.addressMode[1] = cudaAddressModeMirror;
-	texCoarseFloat2.filterMode = cudaFilterModeLinear;
-	texCoarseFloat2.normalized = true;
+	tgvTtexCoarseFloat2.addressMode[0] = cudaAddressModeMirror;
+	tgvTtexCoarseFloat2.addressMode[1] = cudaAddressModeMirror;
+	tgvTtexCoarseFloat2.filterMode = cudaFilterModeLinear;
+	tgvTtexCoarseFloat2.normalized = true;
 
 	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float2>();
 
-	cudaBindTexture2D(0, texCoarseFloat2, src, width, height, stride * sizeof(float2));
+	cudaBindTexture2D(0, tgvTtexCoarseFloat2, src, width, height, stride * sizeof(float2));
 
 	TgvUpscaleFloat2Kernel << < blocks, threads >> > (newWidth, newHeight, newStride, scale, out);
 }
@@ -97,7 +97,7 @@ __global__ void TgvUpscaleMaskedKernel(float * mask, int width, int height, int 
 
 	// exploit hardware interpolation
 	// and scale interpolated vector to match next pyramid level resolution
-	out[pos] = tex2D(texCoarse, x, y) * scale;
+	out[pos] = tex2D(tgvTexCoarse, x, y) * scale;
 
 	//if (ix >= width || iy >= height) return;
 
@@ -113,14 +113,14 @@ void StereoTgv::UpscaleMasked(const float *src, float* mask, int width, int heig
 	dim3 blocks(iDivUp(newWidth, threads.x), iDivUp(newHeight, threads.y));
 
 	// mirror if a coordinate value is out-of-range
-	texCoarse.addressMode[0] = cudaAddressModeMirror;
-	texCoarse.addressMode[1] = cudaAddressModeMirror;
-	texCoarse.filterMode = cudaFilterModeLinear;
-	texCoarse.normalized = true;
+	tgvTexCoarse.addressMode[0] = cudaAddressModeMirror;
+	tgvTexCoarse.addressMode[1] = cudaAddressModeMirror;
+	tgvTexCoarse.filterMode = cudaFilterModeLinear;
+	tgvTexCoarse.normalized = true;
 
 	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
 
-	cudaBindTexture2D(0, texCoarse, src, width, height, stride * sizeof(float));
+	cudaBindTexture2D(0, tgvTexCoarse, src, width, height, stride * sizeof(float));
 
 	TgvUpscaleMaskedKernel << < blocks, threads >> > (mask, newWidth, newHeight, newStride, scale, out);
 }
@@ -144,7 +144,7 @@ void TgvUpscaleFloat2MaskedKernel(float * mask, int width, int height, int strid
 
 	// exploit hardware interpolation
 	// and scale interpolated vector to match next pyramid level resolution
-	float2 src = tex2D(texCoarseFloat2, x, y);
+	float2 src = tex2D(tgvTtexCoarseFloat2, x, y);
 	out[pos].x = src.x * scale;
 	out[pos].y = src.y * scale;
 }
@@ -156,14 +156,14 @@ void StereoTgv::UpscaleMasked(const float2 *src, float * mask, int width, int he
 	dim3 blocks(iDivUp(newWidth, threads.x), iDivUp(newHeight, threads.y));
 
 	// mirror if a coordinate value is out-of-range
-	texCoarseFloat2.addressMode[0] = cudaAddressModeMirror;
-	texCoarseFloat2.addressMode[1] = cudaAddressModeMirror;
-	texCoarseFloat2.filterMode = cudaFilterModeLinear;
-	texCoarseFloat2.normalized = true;
+	tgvTtexCoarseFloat2.addressMode[0] = cudaAddressModeMirror;
+	tgvTtexCoarseFloat2.addressMode[1] = cudaAddressModeMirror;
+	tgvTtexCoarseFloat2.filterMode = cudaFilterModeLinear;
+	tgvTtexCoarseFloat2.normalized = true;
 
 	cudaChannelFormatDesc desc = cudaCreateChannelDesc<float2>();
 
-	cudaBindTexture2D(0, texCoarseFloat2, src, width, height, stride * sizeof(float2));
+	cudaBindTexture2D(0, tgvTtexCoarseFloat2, src, width, height, stride * sizeof(float2));
 
 	TgvUpscaleFloat2MaskedKernel << < blocks, threads >> > (mask, newWidth, newHeight, newStride, scale, out);
 }

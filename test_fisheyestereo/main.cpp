@@ -11,9 +11,9 @@ int main(int argc, char *argv[]) {
 	//test_VehicleSegmentationSequence();
 	//test_VehicleSegmentation();
 	//test_PlaneSweepWithTvl1();
-	//test_ImageSequencePlanesweep();
+	test_ImageSequencePlanesweep(mainfolder, startFrame, endFrame);
 	//test_PlaneSweep();
-	test_ImageSequence(mainfolder, startFrame, endFrame);
+	//test_ImageSequence(mainfolder, startFrame, endFrame);
 	//test_ImageSequenceLite();
 	//test_StereoLiteTwoFrames(4, 2.0f, 30, 30);
 	//test_TwoFrames(4, 2.0f, 30, 30);

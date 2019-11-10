@@ -14,7 +14,13 @@ __global__ void LiteConvertDisparityToDepthKernel(float *disparity, float baseli
 	float X = (ix - width / 2)*Z / focal;
 	float Y = (iy - height / 2)*Z / focal;
 	depth[pos] = sqrt(Z * Z + X * X + Y * Y);*/
-	depth[pos] = baseline * focal / disparity[pos];
+	if (disparity[pos] == 0.0f) {
+		depth[pos] = 0.0f;
+	}
+	else {
+		depth[pos] = baseline * focal / disparity[pos];
+	}
+	
 }
 
 

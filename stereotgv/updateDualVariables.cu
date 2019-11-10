@@ -131,35 +131,36 @@ __global__ void TgvUpdateDualVariablesTGVMaskedKernel(float* mask, float* u_, fl
 	if ((iy >= height) && (ix >= width)) return;
 	int pos = ix + iy * stride;
 	if (mask[pos] == 0.0f) return;
-	
-	//p[pos] = make_float2(0.0f, 0.0f);
-	//q[pos] = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 
 	int right = (ix + 1) + iy * stride;
-	int down = ix + (iy + 1) * stride;
 	int left = (ix - 1) + iy * stride;
+	int down = ix + (iy + 1) * stride;
 	int up = ix + (iy - 1) * stride;
+
 	float maskRight, maskDown;
 	if (ix + 1 >= width) {
 		maskRight = 0.0f;
 	}
 	else maskRight = mask[right];
+	
 	if (iy + 1 >= height) {
 		maskDown = 0.0f;
 	}
 	else maskDown = mask[down];
-
+	
 	float u_pos = u_[pos];
 	float2 v_pos = v_[pos];
-
+	
 	//u_x = dxp(u_) - v_(:, : , 1);
-	float u_x, u_y;
-	if (maskRight != 0.0f)
+	float u_x = 0.0f;
+	float u_y = 0.0f;
+	if ((maskRight != 0.0f) || (ix - 1 < 0))
 		u_x = u_[right] - u_pos - v_pos.x;
 	else 
 		u_x = u_pos - u_[left] - v_pos.x;
+	
 	//u_y = dyp(u_) - v_(:, : , 2);
-	if (maskDown != 0.0f)
+	if ((maskDown != 0.0f) || (iy - 1 < 0))
 		u_y = u_[down] - u_pos - v_pos.y;
 	else 
 		u_y = u_pos - u_[up] - v_pos.y;
@@ -169,7 +170,7 @@ __global__ void TgvUpdateDualVariablesTGVMaskedKernel(float* mask, float* u_, fl
 	//du_tensor_y = c.*u_x + b.*u_y;
 	float du_tensor_y = c[pos] * u_x + b[pos] * u_y;
 
-	float2 ppos;
+	float2 ppos = make_float2(0.0f, 0.0f);
 	//p(:, : , 1) = p(:, : , 1) + alpha1*sigma / eta_p.*du_tensor_x;
 	ppos.x = p[pos].x + (alpha1*sigma / eta_p) * du_tensor_x;
 	//p(:, : , 2) = p(:, : , 2) + alpha1*sigma / eta_p.*du_tensor_y;
@@ -181,46 +182,43 @@ __global__ void TgvUpdateDualVariablesTGVMaskedKernel(float* mask, float* u_, fl
 	if (reprojection < 1.0f) {
 		reprojection = 1.0f;
 	}
+
 	//p(:, : , 1) = p(:, : , 1). / reprojection;
 	p[pos].x = ppos.x / reprojection;
 	//p(:, : , 2) = p(:, : , 2). / reprojection;
 	p[pos].y = ppos.y / reprojection;
 
 	//grad_v(:, : , 1) = dxp(v_(:, : , 1));
-	float4 grad_v_pos;
-	if (maskRight != 0.0f)
+	float4 grad_v_pos =  make_float4(0.1f, 0.1f, 0.1f, 0.1f);
+	if ((maskRight != 0.0f) || (ix - 1 < 0)) {
 		grad_v_pos.x = v_[right].x - v_pos.x;
-	else 
-		grad_v_pos.x = v_pos.x - v_[left].x;
-
-	//grad_v(:, : , 2) = dyp(v_(:, : , 2));
-	if (maskDown != 0.0f)
-		grad_v_pos.y = v_[down].y - v_pos.y;
-	else 
-		grad_v_pos.y = v_pos.y - v_[up].y;
-
-	//grad_v(:, : , 3) = dyp(v_(:, : , 1));
-	if (maskDown != 0.0f)
-		grad_v_pos.z = v_[down].x - v_pos.x;
-	else 
-		grad_v_pos.z = v_pos.x - v_[up].x;
-
-	//grad_v(:, : , 4) = dxp(v_(:, : , 2));
-	if (maskRight != 0.0f)
 		grad_v_pos.w = v_[right].y - v_pos.y;
-	else 
+	}
+	else {
+		grad_v_pos.x = v_pos.x - v_[left].x;
 		grad_v_pos.w = v_pos.y - v_[left].y;
-
+	}
+	
+	//grad_v(:, : , 2) = dyp(v_(:, : , 2));
+	if ((maskDown != 0.0f) || (iy - 1 < 0)) {
+		grad_v_pos.y = v_[down].y - v_pos.y;
+		grad_v_pos.z = v_[down].x - v_pos.x;
+	}
+	else {
+		grad_v_pos.y = v_pos.y - v_[up].y;
+		grad_v_pos.z = v_pos.x - v_[up].x;
+	}
+	
 	grad_v[pos] = grad_v_pos;
-
+	
 	//q = q + alpha0*sigma / eta_q.*grad_v;
 	float ase = alpha0 * sigma / eta_q;
-	float4 qpos;
+	float4 qpos = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 	qpos.x = q[pos].x + ase * grad_v_pos.x;
 	qpos.y = q[pos].y + ase * grad_v_pos.y;
 	qpos.z = q[pos].z + ase * grad_v_pos.z;
 	qpos.w = q[pos].w + ase * grad_v_pos.w;
-
+	
 	//reproject = max(1.0, sqrt(q(:, : , 1). ^ 2 + q(:, : , 2). ^ 2 + q(:, : , 3). ^ 2 + q(:, : , 4). ^ 2));
 	float reproject = sqrtf(qpos.x * qpos.x + qpos.y * qpos.y + qpos.z * qpos.z + qpos.w * qpos.w);
 	if (reproject < 1.0f) {
@@ -250,3 +248,29 @@ void StereoTgv::UpdateDualVariablesTGVMasked(float* mask, float* u_, float2 *v_,
 		grad_v, p, q,
 		w, h, s);
 }
+
+
+//if (maskRight != 0.0f)
+//	grad_v_pos.x = v_[right].x - v_pos.x;
+//else if (ix - 1 < 0)
+//	grad_v_pos.x = v_[right].x - v_pos.x;
+//else 
+//	grad_v_pos.x = v_pos.x - v_[left].x;
+
+////grad_v(:, : , 2) = dyp(v_(:, : , 2));
+//if (maskDown != 0.0f)
+//	grad_v_pos.y = v_[down].y - v_pos.y;
+//else 
+//	grad_v_pos.y = v_pos.y - v_[up].y;
+
+////grad_v(:, : , 3) = dyp(v_(:, : , 1));
+//if (maskDown != 0.0f)
+//	grad_v_pos.z = v_[down].x - v_pos.x;
+//else 
+//	grad_v_pos.z = v_pos.x - v_[up].x;
+
+////grad_v(:, : , 4) = dxp(v_(:, : , 2));
+//if (maskRight != 0.0f)
+//	grad_v_pos.w = v_[right].y - v_pos.y;
+//else 
+//	grad_v_pos.w = v_pos.y - v_[left].y;
