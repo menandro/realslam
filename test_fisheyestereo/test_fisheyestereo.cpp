@@ -1663,6 +1663,7 @@ void showDepthJetExponential(std::string windowName, cv::Mat image, float maxDep
 	cv::imshow(windowName, u_color);
 	if (shouldWait) cv::waitKey();
 }
+
 void saveDepthJetExponential(std::string fileName, cv::Mat image, float maxDepth, float curve) {
 	cv::Mat u_norm, u_exp, u_gray, u_color;
 	u_norm = image / maxDepth;
