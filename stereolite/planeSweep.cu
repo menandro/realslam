@@ -32,6 +32,11 @@ void LitePlaneSweepMeanCleanup(float* error, float* meanError, float standardDev
 		disparity[pos] = 0.0f;
 		finalWarp[pos] = make_float2(0.0f, 0.0f);
 	}
+	/*if (abs(meanError[pos] - error[pos]) < 1.0f ) {
+		error[pos] = 0.0f;
+		disparity[pos] = 0.0f;
+		finalWarp[pos] = make_float2(0.0f, 0.0f);
+	}*/
 }
 
 __global__
@@ -139,7 +144,11 @@ void LitePlaneSweepCorrelationGetWarpKernel(float* imError, float* disparity, fl
 		}
 	}
 	currError = currError / windowCount;
-	meanError[pos] = (sweepDistance * meanError[pos] + currError) / (sweepDistance + 1.0f);
+	float totalSweep = sweepDistance / sweepStride;
+	/*if ((error[pos] != 1000.0f) && (currError > error[pos])) {
+		meanError[pos] = currError;
+	}*/
+	meanError[pos] = (totalSweep * meanError[pos] + currError) / (totalSweep + 1.0f);
 	//meanError[pos] = (meanError[pos] + currError) / (1.0f + 1.0f);
 	
 	if (currError < error[pos]) {
@@ -170,8 +179,8 @@ void StereoLite::PlaneSweepCorrelationGetWarp(float *i0, float *i1, float* dispa
 	LitePlaneSweepCorrelationGetWarpKernel << <blocks, threads >> > (ps_errorHolder, disparity, sweepDistance, sweepStride,
 		planeSweepMaxDisparity, windowSize, currentWarp, finalWarp, translationVector, w, h, s, error, ps_meanError);
 
-	LitePlaneSweepMeanCleanup << < blocks, threads >> > (error, ps_meanError, planeSweepStandardDev, disparity, finalWarp, 
-		w, h, s);
+	/*LitePlaneSweepMeanCleanup << < blocks, threads >> > (error, ps_meanError, planeSweepStandardDev, disparity, finalWarp, 
+		w, h, s);*/
 }
 
 

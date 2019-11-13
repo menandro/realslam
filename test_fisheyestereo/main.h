@@ -37,19 +37,24 @@
 #pragma comment(lib, LIB_PATH "opencv_cudaimgproc" CV_VER_NUM LIB_EXT)
 #pragma comment(lib, LIB_PATH "opencv_video" CV_VER_NUM LIB_EXT)
 
+// Revision
+int test_SolveTrajectoryPerWarping();
 int test_BlenderDataAllPlanesweep();
 int test_FaroDataAllPlanesweep();
 int test_FaroDataAll();
+int test_ImageSequencePlanesweep(std::string mainfolder, int startFrame, int endFrame);
+int test_ImageSequence(std::string mainfolder, int startFrame, int endFrame);
+
 int test_VehicleSegmentationSequence();
 int test_VehicleSegmentation();
 int test_PlaneSweepWithTvl1();
-int test_ImageSequencePlanesweep(std::string mainfolder, int startFrame, int endFrame);
+
 int test_PlaneSweep();
 int test_StereoLiteTwoFrames(int nLevel, float fScale, int nWarpIters, int nSolverIters);
 int test_TwoFrames(int nLevel, float fScale, int nWarpIters, int nSolverIters);
 int test_LimitingRangeOne();
 int test_BlenderDataSequence();
-int test_ImageSequence(std::string mainfolder, int startFrame, int endFrame);
+
 int test_ImageSequenceLite();
 int test_Timing(int warpIteration);
 int test_LimitingRange();

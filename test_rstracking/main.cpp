@@ -9,8 +9,8 @@ int main() {
 
 	// Save images from recorded t265
 	Tslam *tslam = new Tslam();
-	std::string mainFolder = "h:/data_rs_iis/20191108_20/";
-	tslam->saveT265Images(mainFolder + "bag/20191108_160040.bag", mainFolder);
+	std::string mainFolder = "h:/data_rs_iis/20191111_2/";
+	tslam->saveT265Images(mainFolder + "bag/20191111_194517.bag", mainFolder);
 
 	/*double scale = 2.0;
 	cv::Mat mask = cv::Mat::zeros(cv::Size(848 / scale, 800/scale), CV_8UC1);

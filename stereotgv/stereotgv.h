@@ -111,6 +111,7 @@ public:
 	int copyMaskToDevice(cv::Mat mask);
 	int solveStereoForward();
 	int solveStereoForwardMasked();
+	int solveStereoTrajectoryPerIteration();
 	int copyStereoToHost(cv::Mat &wCropped);
 	int copy1DDisparityToHost(cv::Mat &wCropped);
 	int copyDisparityToHost(cv::Mat &wCropped);

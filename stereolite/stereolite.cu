@@ -4,7 +4,7 @@ void DEBUGWARPIMAGE(std::string windowName, float* deviceImage, int height, int 
 	cv::Mat calibrated = cv::Mat(height, stride, CV_32F);
 	checkCudaErrors(cudaMemcpy((float *)calibrated.ptr(), deviceImage, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
 	
-	cv::imshow(windowName, calibrated);
+	cv::imshow(windowName, 10.0f*calibrated);
 	if (verbose) {
 		std::cout << windowName << " " << calibrated.at<float>((int) ((float)height / 1.2f), stride / 2) << std::endl;
 	}
@@ -451,6 +451,9 @@ int StereoLite::planeSweepSubpixel() {
 		//cv::waitKey(1);
 	}
 
+	/*DEBUGWARPIMAGE("meanerror", ps_meanError, pH[lvl], pS[lvl], false, false);
+	DEBUGWARPIMAGE("error", ps_error, pH[lvl], pS[lvl], false, true);*/
+
 	// Backward
 	checkCudaErrors(cudaMemset(ps_error, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize32f));
@@ -462,12 +465,14 @@ int StereoLite::planeSweepSubpixel() {
 	for (float sweep = 0; sweep <= planeSweepMaxDisparity; sweep += planeSweepStride) {
 		/*PlaneSweepCorrelation(ps_i1warp, pI1[lvl], ps_disparityBackward, sweep, planeSweepWindow,
 			pW[lvl], pH[lvl], pS[lvl], ps_error);*/
-		PlaneSweepCorrelationGetWarp(ps_i1warp, pI1[lvl], ps_disparityBackward, sweep, planeSweepStride, planeSweepWindow,
-			ps_currentWarpBackward, ps_warpBackward, d_tvBackward, pW[lvl], pH[lvl], pS[lvl], ps_error);
+		PlaneSweepCorrelationGetWarp(ps_i1warp, pI1[lvl], ps_disparityBackward, sweep, planeSweepStride, 
+			planeSweepWindow, ps_currentWarpBackward, ps_warpBackward, d_tvBackward, 
+			pW[lvl], pH[lvl], pS[lvl], ps_error);
 		/*for (int psStride = 0; psStride < planeSweepStride; psStride++) {
 			WarpImage(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], d_tvBackward, ps_i1warps);
 			Swap(ps_i1warp, ps_i1warps);
 		}*/
+		
 		WarpImage(pI0[lvl], pW[lvl], pH[lvl], pS[lvl], ps_warpBackward, ps_i1warps);
 		Swap(ps_i1warp, ps_i1warps);
 		
