@@ -533,9 +533,8 @@ int StereoTgv::solveStereoForwardMasked() {
 	return 0;
 }
 
-int StereoTgv::solveStereoTrajectoryPerIteration() {
+int StereoTgv::solveStereoTrajectoryPerIteration(float k0focal, float cx, float cy, float tx, float ty, float tz) {
 	// Warp i1 using vector fields
-	//WarpImageMasked(pI1[0], pFisheyeMask[0], width, height, stride, d_cv, d_i1calibrated);
 	WarpImage(pI1[0], width, height, stride, d_cv, d_i1calibrated);
 	Swap(pI1[0], d_i1calibrated);
 
@@ -551,6 +550,18 @@ int StereoTgv::solveStereoTrajectoryPerIteration() {
 			pW[level], pH[level], pS[level], pI1[level]);
 	}
 
+	// Scale K
+	std::vector<float> pFocal = std::vector<float>(nLevels);
+	std::vector<float> pCx = std::vector<float>(nLevels);
+	std::vector<float> pCy = std::vector<float>(nLevels);
+	pFocal[0] = k0focal;
+	pCx[0] = cx;
+	pCy[0] = cy;
+	for (int level = 1; level < nLevels; level++) {
+		pFocal[level] = pFocal[level - 1] / fScale;
+		pCx[level] = pCx[level - 1] / fScale;
+		pCy[level] = pCy[level - 1] / fScale;
+	}
 
 	// Solve stereo
 	for (int level = nLevels - 1; level >= 0; level--) {
@@ -564,9 +575,9 @@ int StereoTgv::solveStereoTrajectoryPerIteration() {
 		float eta_p = 3.0f;
 		float eta_q = 2.0f;
 
-		if (level == nLevels - 1) {
+		/*if (level == nLevels - 1) {
 			ComputeOpticalFlowVector(d_u, pTvForward[level], pW[level], pH[level], pS[level], d_warpUV);
-		}
+		}*/
 
 		// Calculate anisotropic diffucion tensor
 		GaussianMasked(pI0[level], pFisheyeMask[level], pW[level], pH[level], pS[level], d_i0smooth);
@@ -576,8 +587,6 @@ int StereoTgv::solveStereoTrajectoryPerIteration() {
 		SolveEtaMasked(pFisheyeMask[level], alpha0, alpha1, d_a, d_b, d_c,
 			pW[level], pH[level], pS[level], d_etau, d_etav1, d_etav2);
 
-		//DEBUGIMAGE("mask", pFisheyeMask[level], pH[level], pS[level], false, true);
-		//DEBUGIMAGE(std::to_string(pH[level]), d_c, pH[level], pS[level], false, true);
 
 		checkCudaErrors(cudaMemset(d_u_last, 0, dataSize32f));
 		checkCudaErrors(cudaMemset(d_us, 0, dataSize32f));
@@ -590,16 +599,13 @@ int StereoTgv::solveStereoTrajectoryPerIteration() {
 			checkCudaErrors(cudaMemset(d_gradv, 0, dataSize32fc4));
 			checkCudaErrors(cudaMemset(d_du, 0, dataSize32f));
 
-			FindWarpingVector(d_warpUV, pTvForward[level], pW[level], pH[level], pS[level], d_tv2);
+			FindWarpingVectorEquidistant(d_warpUV, pFocal[level], pCx[level], pCy[level] , tx, ty, tz,
+				pW[level], pH[level], pS[level], d_tv2);
 			WarpImage(pI1[level], pW[level], pH[level], pS[level], d_warpUV, d_i1warp);
-			//DEBUGIMAGE("mask", d_i1warp, pH[level], pS[level], false, false);
+			
+			ComputeDerivativesFisheyeEquidistant(pI0[level], d_i1warp, pFocal[level], pCx[level], pCy[level], 
+				tx, ty, tz,	pW[level], pH[level], pS[level], d_Iu, d_Iz);
 
-			/*ComputeDerivativesFisheyeMasked(pI0[level], d_i1warp, pTvForward[level], pFisheyeMask[level],
-				pW[level], pH[level], pS[level], d_Iu, d_Iz);*/
-			ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvForward[level],
-				pW[level], pH[level], pS[level], d_Iu, d_Iz);
-
-			//DEBUGIMAGE("mask2", pI1[level], pH[level], pS[level], false, true);
 			Clone(d_u_last, pW[level], pH[level], pS[level], d_u);
 
 			float tau = 1.0f;
@@ -612,35 +618,20 @@ int StereoTgv::solveStereoTrajectoryPerIteration() {
 				if (sigma < 1000.0f) mu = 1.0f / sqrt(1 + 0.7f * tau * timestep_lambda);
 				else mu = 1;
 
-
 				// Solve Dual Variables
-				/*DEBUGIMAGE("here", pFisheyeMask[level], pH[level], pS[level], false, true);
-				std::cout << "sigma: " << sigma << " processing..." << std::endl;*/
 				UpdateDualVariablesTGVMasked(pFisheyeMask[level], d_u_, d_v_, alpha0, alpha1, sigma, eta_p, eta_q,
 					d_a, d_b, d_c, pW[level], pH[level], pS[level],
 					d_gradv, d_p, d_q);
-				/*DEBUGIMAGE("dots", pFisheyeMask[level], pH[level], pS[level], false, true);
-				std::cout << "escaped" << std::endl;*/
 
 				// Solve Thresholding
-
-
 				SolveTpMasked(pFisheyeMask[level], d_a, d_b, d_c, d_p, pW[level], pH[level], pS[level], d_Tp);
-
-				//SolveTp(d_a, d_b, d_c, d_p, pW[level], pH[level], pS[level], d_Tp);
-
 				ThresholdingL1Masked(d_Tp, d_u_, d_Iu, d_Iz, pFisheyeMask[level], lambda, tau, d_etau, d_u, d_us,
 					pW[level], pH[level], pS[level]);
-
-
 				Swap(d_u, d_us);
 
-
 				// Solve Primal Variables
-
 				UpdatePrimalVariablesMasked(pFisheyeMask[level], d_u_, d_v_, d_p, d_q, d_a, d_b, d_c, tau, d_etav1, d_etav2,
 					alpha0, alpha1, mu, d_u, d_v, d_u_s, d_v_s, pW[level], pH[level], pS[level]);
-
 
 				Swap(d_u_, d_u_s);
 				Swap(d_v_, d_v_s);

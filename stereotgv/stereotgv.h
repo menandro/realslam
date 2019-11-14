@@ -111,7 +111,7 @@ public:
 	int copyMaskToDevice(cv::Mat mask);
 	int solveStereoForward();
 	int solveStereoForwardMasked();
-	int solveStereoTrajectoryPerIteration();
+	int solveStereoTrajectoryPerIteration(float k0focal, float cx, float cy, float tx, float ty, float tz);
 	int copyStereoToHost(cv::Mat &wCropped);
 	int copy1DDisparityToHost(cv::Mat &wCropped);
 	int copyDisparityToHost(cv::Mat &wCropped);
@@ -158,6 +158,9 @@ public:
 		float2 *tv2);
 	void FindWarpingVector(const float2 *warpUV, const float *tvx, const float *tvy,
 		int w, int h, int s, float2 *tv2);
+	void FindWarpingVectorEquidistant(const float2 *warpUV,
+		float focal, float cx, float cy, float tx, float ty, float tz,
+		int w, int h, int s, float2 *tv2);
 	void CalcTensor(float* gray, float beta, float gamma, int size_grad,
 		int w, int h, int s, float* a, float* b, float* c);
 	void Gaussian(float* input, int w, int h, int s, float* output);
@@ -169,6 +172,9 @@ public:
 	void ComputeDerivatives(float *I0, float *I1,
 		int w, int h, int s, float *Ix, float *Iy, float *Iz);
 	void ComputeDerivativesFisheye(float *I0, float *I1, float2 *vector,
+		int w, int h, int s, float *Iw, float *Iz);
+	void ComputeDerivativesFisheyeEquidistant(float *I0, float *I1,
+		float focal, float cx, float cy, float tx, float ty, float tz,
 		int w, int h, int s, float *Iw, float *Iz);
 	void Upscale(const float *src, int width, int height, int stride,
 		int newWidth, int newHeight, int newStride, float scale, float *out);

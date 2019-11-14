@@ -156,6 +156,131 @@ void StereoTgv::ComputeDerivativesFisheye(float *I0, float *I1, float2 *vector,
 
 
 //****************************************
+// Fisheye Stereo 1D Derivative Equidistant Model
+//****************************************
+__global__
+void TgvComputeDerivativesFisheyeEquidistantKernel(float focal, float cx, float cy, float tx, float ty, float tz, 
+	int width, int height, int stride,
+	float *Iw, float *Iz)
+{
+	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
+	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
+
+	const int pos = ix + iy * stride;
+
+	if (ix >= width || iy >= height) return;
+
+	float u0 = ix;
+	float v0 = iy;
+
+	//float x = ((float)ix + warpUV[pos].x + 0.5f) / (float)width;
+	//float y = ((float)iy + warpUV[pos].y + 0.5f) / (float)height;
+
+	// Create arbitrary surface
+	float xprime0 = (u0 - cx);
+	float yprime0 = (v0 - cy);
+	float theta = sqrtf(xprime0*xprime0 + yprime0 * yprime0) / focal;
+	float Xradius = 1.0f;
+	float Z = Xradius * cosf(theta);
+	float phi = atan2f(yprime0, xprime0);
+	float X = Xradius * sinf(theta) * cosf(phi);
+	float Y = Xradius * sinf(theta) * sinf(phi);
+
+	// Forward vector
+	float XX = X + tx;
+	float YY = Y + ty;
+	float ZZ = Z + tz;
+	float XXradius = sqrtf(XX*XX + YY * YY);
+	float theta2 = atan2f(XXradius, ZZ);
+	float alpha2 = focal * theta2;
+	float phi2 = atan2(YY, XX);
+	float xprime1 = alpha2 * cosf(phi2);
+	float yprime1 = alpha2 * sinf(phi2);
+	float u1 = xprime1 + cx;
+	float v1 = yprime1 + cy;
+	float vectorxforward = u1 - u0;
+	float vectoryforward = v1 - v0;
+
+	// Backward vector
+	XX = X - tx;
+	YY = Y - ty;
+	ZZ = Z - tz;
+	XXradius = sqrt(XX*XX + YY * YY);
+	theta2 = atan2(XXradius, ZZ);
+	alpha2 = focal * theta2;
+	phi2 = atan2f(YY, XX);
+	xprime1 = alpha2 * cosf(phi2);
+	yprime1 = alpha2 * sinf(phi2);
+	u1 = xprime1 + cx;
+	v1 = yprime1 + cy;
+	float vectorxbackward = u1 - u0;
+	float vectorybackward = v1 - v0;
+
+	// Solve trajectory vector
+	float vectorx = 0.5f*(vectorxforward - vectorxbackward);
+	float vectory = 0.5f*(vectoryforward - vectorybackward);
+	// Normalize
+	float magnitude = sqrt(vectorx*vectorx + vectory * vectory);
+	float dx = (vectorx / magnitude) / (float)width;
+	float dy = (vectory / magnitude) / (float)height;
+
+	// Normalize because pyramid sampling ruins normality
+	/*float dx = (vx / r) / (float)width;
+	float dy = (vy / r) / (float)height;*/
+
+	float x = ((float)ix + 0.5f) / (float)width;
+	float y = ((float)iy + 0.5f) / (float)height;
+
+	float t0;
+	// curve w derivative
+	t0 = tex2D(texI0, x - 2.0f * dx, y - 2.0f * dy);
+	t0 -= tex2D(texI0, x - 1.0f * dx, y - 1.0f * dy) * 8.0f;
+	t0 += tex2D(texI0, x + 1.0f * dx, y + 1.0f * dy) * 8.0f;
+	t0 -= tex2D(texI0, x + 2.0f * dx, y + 2.0f * dy);
+	t0 /= 12.0f;
+
+	float t1;
+	t1 = tex2D(texI1, x - 2.0f * dx, y - 2.0f * dy);
+	t1 -= tex2D(texI1, x - 1.0f * dx, y - 1.0f * dy) * 8.0f;
+	t1 += tex2D(texI1, x + 1.0f * dx, y + 1.0f * dy) * 8.0f;
+	t1 -= tex2D(texI1, x + 2.0f * dx, y + 2.0f * dy);
+	t1 /= 12.0f;
+
+	Iw[pos] = (t0 + t1) * 0.5f;
+
+	// t derivative
+	Iz[pos] = tex2D(texI1, x, y) - tex2D(texI0, x, y);
+}
+
+///CUDA CALL FUNCTIONS ***********************************************************
+void StereoTgv::ComputeDerivativesFisheyeEquidistant(float *I0, float *I1,
+	float focal, float cx, float cy, float tx, float ty, float tz,
+	int w, int h, int s, float *Iw, float *Iz)
+{
+	dim3 threads(BlockWidth, BlockHeight);
+	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
+
+	// mirror if a coordinate value is out-of-range
+	texI0.addressMode[0] = cudaAddressModeMirror;
+	texI0.addressMode[1] = cudaAddressModeMirror;
+	texI0.filterMode = cudaFilterModeLinear;
+	texI0.normalized = true;
+
+	texI1.addressMode[0] = cudaAddressModeMirror;
+	texI1.addressMode[1] = cudaAddressModeMirror;
+	texI1.filterMode = cudaFilterModeLinear;
+	texI1.normalized = true;
+
+	//cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
+
+	cudaBindTexture2D(0, texI0, I0, w, h, s * sizeof(float));
+	cudaBindTexture2D(0, texI1, I1, w, h, s * sizeof(float));
+
+	TgvComputeDerivativesFisheyeEquidistantKernel << < blocks, threads >> > (focal, cx, cy, tx, ty, tz,
+		w, h, s, Iw, Iz);
+}
+
+//****************************************
 // Fisheye Stereo 1D Derivative MASKED
 //****************************************
 __global__

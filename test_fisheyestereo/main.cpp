@@ -1,19 +1,21 @@
 #include "main.h"
 
 int main(int argc, char *argv[]) {
+	test_SolveTrajectoryPerWarpingFaro();
+
 	//test_BlenderDataAllPlanesweep();
 	//test_FaroDataAllPlanesweep();
-	//test_FaroDataAll();
+	test_FaroDataAll();
 	//test_VehicleSegmentationSequence();
 	//test_VehicleSegmentation();
 	//test_PlaneSweepWithTvl1();
 
-	std::string mainfolder = std::string(argv[1]);
-	int startFrame = atoi(argv[2]);
-	int endFrame = atoi(argv[3]);
-	std::cout << mainfolder << " " << startFrame << " " << endFrame << std::endl;
-	//test_ImageSequencePlanesweep(mainfolder, startFrame, endFrame);
-	test_ImageSequence(mainfolder, startFrame, endFrame);
+	//std::string mainfolder = std::string(argv[1]);
+	//int startFrame = atoi(argv[2]);
+	//int endFrame = atoi(argv[3]);
+	//std::cout << mainfolder << " " << startFrame << " " << endFrame << std::endl;
+	////test_ImageSequencePlanesweep(mainfolder, startFrame, endFrame);
+	//test_ImageSequence(mainfolder, startFrame, endFrame);
 
 	//test_PlaneSweep();
 	//test_ImageSequenceLite();

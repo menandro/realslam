@@ -1,6 +1,15 @@
 #include "main.h"
 
-int test_SolveTrajectoryPerWarping() {
+int readCalibFileFaro(std::string filename, cv::Mat &K, cv::Mat &R, cv::Mat &t) {
+	cv::FileStorage fs;
+	fs.open(filename, cv::FileStorage::READ);
+	fs["K"] >> K;
+	fs["R"] >> R;
+	fs["t"] >> t;
+	return 0;
+}
+
+int test_SolveTrajectoryPerWarpingFaro(){
 	std::string folder = "h:/data_icra/";
 
 	StereoTgv * stereotgv = new StereoTgv();
@@ -9,7 +18,7 @@ int test_SolveTrajectoryPerWarping() {
 	float stereoScaling = 1.0f;
 	int nLevel = 11;
 	float fScale = 1.2f;
-	int nWarpIters = 100;
+	int nWarpIters = 50;
 	int nSolverIters = 50;
 	float lambda = 5.0f;
 	stereotgv->limitRange = 0.1f;
@@ -29,11 +38,21 @@ int test_SolveTrajectoryPerWarping() {
 	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
 	stereotgv->copyMaskToDevice(fisheyeMask);
 
-	for (int k = 100; k <= 100; k++) {
+	for (int k = 219; k <= 219; k++) {
 		std::string filename = "im" + std::to_string(k);
-		std::string outputFilename = folder + "output/" + filename + ".flo";
+		std::string outputFilename = folder + "outputactualcurve/" + filename + ".flo";
 		cv::Mat im1 = cv::imread(folder + "image_02/data/" + filename + ".png");
 		cv::Mat im2 = cv::imread(folder + "image_03/data/" + filename + ".png");
+		cv::Mat K, R, t;
+		readCalibFileFaro(folder + "calib/" + filename + ".xml", K, R, t);
+		float cx = (float)K.at<double>(0, 2);
+		float cy = (float)K.at<double>(1, 2);
+		float focal = (float)K.at<double>(0, 0);
+		float tx = (float)t.at<double>(0);
+		float ty = (float)t.at<double>(1);
+		float tz = (float)t.at<double>(2);
+		std::cout << cx << " " << cy << " " << focal << " " << tx << " " << ty << " " << tz << std::endl;
+
 		cv::Mat equi1, equi2;
 		cv::cvtColor(im1, im1, cv::COLOR_BGR2GRAY);
 		cv::cvtColor(im2, im2, cv::COLOR_BGR2GRAY);
@@ -41,13 +60,14 @@ int test_SolveTrajectoryPerWarping() {
 		cv::equalizeHist(im2, equi2);
 		int stereoWidth = width;
 		int stereoHeight = height;
-		cv::Mat translationVector = cv::readOpticalFlow(folder + "translationVector/" + filename + ".flo");
+		//cv::Mat translationVector = cv::readOpticalFlow(folder + "translationVector/" + filename + ".flo");
+		cv::Mat translationVector = cv::Mat::zeros(im1.size(), CV_32FC2);
 		cv::Mat calibrationVector = cv::readOpticalFlow(folder + "calibrationVector/" + filename + ".flo");
 
 		stereotgv->loadVectorFields(translationVector, calibrationVector);
 
 		stereotgv->copyImagesToDevice(equi1, equi2);
-		stereotgv->solveStereoTrajectoryPerIteration();
+		stereotgv->solveStereoTrajectoryPerIteration(focal, cx, cy, tx, ty, tz);
 
 		cv::Mat disparityVis = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
 		stereotgv->copyDisparityVisToHost(disparityVis, 50.0f);
@@ -71,8 +91,7 @@ int test_SolveTrajectoryPerWarping() {
 		cv::imshow("warped", warped);
 		cv::waitKey(1);
 	}
-	return 0;
-}
+	cv::waitKey();
 	return 0;
 }
 
@@ -251,7 +270,7 @@ int test_FaroDataAll() {
 	float stereoScaling = 1.0f;
 	int nLevel = 11;
 	float fScale = 1.2f;
-	int nWarpIters = 100;
+	int nWarpIters = 50;
 	int nSolverIters = 50;
 	float lambda = 5.0f;
 	stereotgv->limitRange = 0.1f;
@@ -271,7 +290,7 @@ int test_FaroDataAll() {
 	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
 	stereotgv->copyMaskToDevice(fisheyeMask);
 
-	for (int k = 100; k <= 100; k++) {
+	for (int k = 219; k <= 219; k++) {
 		std::string filename = "im" + std::to_string(k);
 		std::string outputFilename = folder + "output/" + filename + ".flo";
 		cv::Mat im1 = cv::imread(folder + "image_02/data/" + filename + ".png");
