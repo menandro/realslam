@@ -167,7 +167,7 @@ public:
 
 	// TVL1
 	void ThresholdingL1Masked(float* mask, float* u, float* u_, float* Iu, float* Iz, float lambda, float theta,
-		float* us, int w, int h, int s);
+		int w, int h, int s);
 	void ThresholdingL1LambdaMasked(float* mask, float* u, float* u_, float* Iu, float* Iz, float lambda, float* lambdaMask, float theta,
 		float* us, int w, int h, int s);
 	void SimpleL2(float* mask, float* u, float* u_, float l2lambda, float* lambdaMask,
@@ -200,8 +200,8 @@ public:
 		float *Ix, float *Iy, float *Iz);
 	void ComputeDerivativesFisheye(float *I0, float *I1, float2 *vector,
 		int w, int h, int s, float *Iw, float *Iz);
-	void Clone(float2* dst, int w, int h, int s, float2* src);
-	void Clone(float* dst, int w, int h, int s, float* src);
+	void Clone(float2* src, float2* dst, int w, int h, int s);
+	void Clone(float* src, float* dst, int w, int h, int s);
 	void Downscale(const float *src, int width, int height, int stride,
 		int newWidth, int newHeight, int newStride, float *out);
 	void DownscaleNearestNeighbor(const float *src, int width, int height, int stride,

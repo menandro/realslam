@@ -2,7 +2,7 @@
 
 // Solve Problem1A - Thresholding
 __global__ void LiteThresholdingL1MaskedKernel(float* mask, float* u, float* u_, float* Iu, float* Iz, float lambda, float theta,
-	int width, int height, int stride, float* us)
+	int width, int height, int stride)
 {
 	int iy = blockIdx.y * blockDim.y + threadIdx.y;        // current row 
 	int ix = blockIdx.x * blockDim.x + threadIdx.x;        // current column 
@@ -36,17 +36,17 @@ __global__ void LiteThresholdingL1MaskedKernel(float* mask, float* u, float* u_,
 		du = dun - lambda * theta *Ius;
 	}
 
-	us[pos] = u_pos + du;
+	u[pos] = u_pos + du;
 }
 
-void StereoLite::ThresholdingL1Masked(float* mask, float* u, float* u_, float* Iu, float* Iz, float lambda, float theta,
-	float* us, int w, int h, int s)
+void StereoLite::ThresholdingL1Masked(float* mask, float* u, float* u_, float* Iu, float* Iz, float lambda, float theta, 
+	int w, int h, int s)
 {
 	dim3 threads(BlockWidth, BlockHeight);
 	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
 
 	LiteThresholdingL1MaskedKernel << < blocks, threads >> > (mask, u, u_, Iu, Iz, lambda, theta,
-		w, h, s, us);
+		w, h, s);
 }
 
 
@@ -212,6 +212,7 @@ __global__ void LiteSolveProblem1bMaskedKernel(float* mask, float* u, float2 *p,
 		maskLeft = 0.0f;
 	}
 	else maskLeft = mask[left];
+
 	if (iy - 1 < 0) {
 		maskUp = 0.0f;
 	}
@@ -221,15 +222,18 @@ __global__ void LiteSolveProblem1bMaskedKernel(float* mask, float* u, float2 *p,
 	float2 ppos = p[pos];
 	if (maskLeft == 0.0f) {
 		if (maskUp == 0.0f) {
-			divp = ppos.x + ppos.y;
+			//divp = ppos.x + ppos.y;
+			divp = 0.0f;
 		}
 		else {
-			divp = ppos.x + ppos.y - p[up].y;
+			//divp = ppos.x + ppos.y - p[up].y;
+			divp = ppos.y - p[up].y;
 		}
 	}
 	else {
 		if (maskUp == 0.0f) {
-			divp = ppos.x - p[left].x + ppos.y;
+			//divp = ppos.x - p[left].x + ppos.y;
+			divp = ppos.x - p[left].x;
 		}
 		else {
 			divp = ppos.x - p[left].x + ppos.y - p[up].y;

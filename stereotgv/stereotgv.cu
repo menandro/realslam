@@ -306,8 +306,7 @@ int StereoTgv::solveStereoForward() {
 				//DEBUGIMAGE("i1", pI1[level], pH[level], pS[level], false, false);
 				DEBUGIMAGE("iwarp", d_i1warp, pH[level], pS[level], false, false);
 			}
-			
-			
+
 			ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvForward[level], 
 				pW[level], pH[level], pS[level], d_Iu, d_Iz);
 			Clone(d_u_last, pW[level], pH[level], pS[level], d_u);
@@ -533,7 +532,7 @@ int StereoTgv::solveStereoForwardMasked() {
 	return 0;
 }
 
-int StereoTgv::solveStereoTrajectoryPerIteration(float k0focal, float cx, float cy, float tx, float ty, float tz) {
+int StereoTgv::solveStereoTrajectoryPerIteration(float fov, float cx, float cy, float tx, float ty, float tz) {
 	// Warp i1 using vector fields
 	WarpImage(pI1[0], width, height, stride, d_cv, d_i1calibrated);
 	Swap(pI1[0], d_i1calibrated);
@@ -554,13 +553,14 @@ int StereoTgv::solveStereoTrajectoryPerIteration(float k0focal, float cx, float 
 	std::vector<float> pFocal = std::vector<float>(nLevels);
 	std::vector<float> pCx = std::vector<float>(nLevels);
 	std::vector<float> pCy = std::vector<float>(nLevels);
-	pFocal[0] = k0focal;
+	pFocal[0] = pW[0] / fov;
 	pCx[0] = cx;
 	pCy[0] = cy;
 	for (int level = 1; level < nLevels; level++) {
-		pFocal[level] = pFocal[level - 1] / fScale;
-		pCx[level] = pCx[level - 1] / fScale;
-		pCy[level] = pCy[level - 1] / fScale;
+		pFocal[level] = pW[level] / fov;
+		pCx[level] = pW[level] / 2.0f;
+		pCy[level] = pH[level] / 2.0f;
+		//std::cout << pCx[level] << " " << pW[level] << std::endl;
 	}
 
 	// Solve stereo

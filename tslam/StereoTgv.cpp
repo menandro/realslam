@@ -3,12 +3,12 @@
 int Tslam::initStereoTGVL1() {
 	stereotgv = new StereoTgv();
 	stereoScaling = 2.0f;
-	float lambda = 5.0f;
-	float nLevel = 4;
+	float lambda = 10.0f;
+	float nLevel = 5;
 	float fScale = 2.0f;
-	int nWarpIters = 20;
+	int nWarpIters = 5;
 	int nSolverIters = 20;
-	stereotgv->limitRange = 0.2f;
+	stereotgv->limitRange = 1.0f;
 
 	stereoWidth = (int)(t265.width / stereoScaling);
 	stereoHeight = (int)(t265.height / stereoScaling);
@@ -69,6 +69,7 @@ int Tslam::solveStereoTGVL1() {
 		//std::cout << "time: " << timeElapsed << " ms" << std::endl;
 
 		depth.copyTo(depthVis, fisheyeMask8);
+		cv::resize(depthVis, t265.depth32f, cv::Size(t265.width, t265.height));
 		showDepthJet("color", depthVis, std::to_string(timeElapsed), 5.0f, false);
 		cv::imshow("equi1", halfFisheye1);
 	}

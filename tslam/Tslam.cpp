@@ -19,7 +19,7 @@ int Tslam::initialize(const char* serialNumber) {
 			std::cout << "Found device: " << serialNo << std::endl;
 			std::vector<rs2::sensor> sensors = devfound.query_sensors();
 			sensors[0].set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0);
-			sensors[0].set_option(RS2_OPTION_EXPOSURE, 16000);
+			sensors[0].set_option(RS2_OPTION_EXPOSURE, 12000);
 			sensors[0].set_option(RS2_OPTION_GAIN, 1);
 
 			// Create pipeline for device0

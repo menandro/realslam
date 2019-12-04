@@ -170,8 +170,8 @@ void TgvComputeDerivativesFisheyeEquidistantKernel(float focal, float cx, float 
 
 	if (ix >= width || iy >= height) return;
 
-	float u0 = ix;
-	float v0 = iy;
+	float u0 = ix + 1;
+	float v0 = iy + 1;
 
 	//float x = ((float)ix + warpUV[pos].x + 0.5f) / (float)width;
 	//float y = ((float)iy + warpUV[pos].y + 0.5f) / (float)height;

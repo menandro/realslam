@@ -1,6 +1,6 @@
 #include "stereoLite.h"
 
-__global__ void LiteCloneKernel(float* dst, float* src, int width, int height, int stride) {
+__global__ void LiteCloneKernel(float* src, float* dst, int width, int height, int stride) {
 	int iy = blockIdx.y * blockDim.y + threadIdx.y;        // current row 
 	int ix = blockIdx.x * blockDim.x + threadIdx.x;        // current column 
 
@@ -11,14 +11,14 @@ __global__ void LiteCloneKernel(float* dst, float* src, int width, int height, i
 	}
 }
 
-void StereoLite::Clone(float* dst, int w, int h, int s, float* src) {
+void StereoLite::Clone(float* src, float* dst, int w, int h, int s) {
 	dim3 threads(BlockWidth, BlockHeight);
 	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
-	LiteCloneKernel << < blocks, threads >> > (dst, src, w, h, s);
+	LiteCloneKernel << < blocks, threads >> > (src, dst, w, h, s);
 }
 
 
-__global__ void LiteCloneKernel2(float2* dst, float2* src, int width, int height, int stride) {
+__global__ void LiteCloneKernel2(float2* src, float2* dst, int width, int height, int stride) {
 	int iy = blockIdx.y * blockDim.y + threadIdx.y;        // current row 
 	int ix = blockIdx.x * blockDim.x + threadIdx.x;        // current column 
 
@@ -29,10 +29,10 @@ __global__ void LiteCloneKernel2(float2* dst, float2* src, int width, int height
 	}
 }
 
-void StereoLite::Clone(float2* dst, int w, int h, int s, float2* src) {
+void StereoLite::Clone(float2* src, float2* dst, int w, int h, int s) {
 	dim3 threads(BlockWidth, BlockHeight);
 	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
-	LiteCloneKernel2 << < blocks, threads >> > (dst, src, w, h, s);
+	LiteCloneKernel2 << < blocks, threads >> > (src, dst, w, h, s);
 }
 
 // Set Value

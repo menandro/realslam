@@ -38,6 +38,9 @@
 #pragma comment(lib, LIB_PATH "opencv_video" CV_VER_NUM LIB_EXT)
 
 // Revision
+int test_BlenderPerspectiveDataSequence();
+int test_SolveTrajectoryPerWarpingBlenderDataAll();
+int test_SolveTrajectoryPerWarpingBlenderData();
 int test_SolveTrajectoryPerWarpingFaro();
 int test_BlenderDataAllPlanesweep();
 int test_FaroDataAllPlanesweep();

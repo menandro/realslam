@@ -9,6 +9,222 @@ int readCalibFileFaro(std::string filename, cv::Mat &K, cv::Mat &R, cv::Mat &t) 
 	return 0;
 }
 
+int test_BlenderPerspectiveDataSequence() {
+	std::string folder = "h:/blender/pers01";
+	cv::Mat translationVector = cv::readOpticalFlow(folder + "/translationVectorBlenderPerspective.flo");
+	int stereoWidth = 800;
+	int stereoHeight = 800;
+	cv::Mat calibrationVector = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_32FC2);
+	cv::Mat mask = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_8UC1) + 255;
+	cv::Mat fisheyeMask;
+	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
+
+	StereoTgv * stereotgv = new StereoTgv();
+	int width = 800;
+	int height = 800;
+	float stereoScaling = 1.0f;
+	int nLevel = 11; // 11 in paper
+	float fScale = 1.2f;
+	int nWarpIters = 50;
+	int nSolverIters = 50;
+	float lambda = 5.0f;
+	stereotgv->limitRange = 1.0f;
+
+
+	float beta = 9.0f;
+	float gamma = 0.85f;
+	float alpha0 = 17.0f;
+	float alpha1 = 1.2f;
+	float timeStepLambda = 1.0f;
+
+	stereotgv->initialize(stereoWidth, stereoHeight, beta, gamma, alpha0, alpha1,
+		timeStepLambda, lambda, nLevel, fScale, nWarpIters, nSolverIters);
+	stereotgv->visualizeResults = true;
+
+	stereotgv->copyMaskToDevice(fisheyeMask);
+	stereotgv->loadVectorFields(translationVector, calibrationVector);
+	cv::Mat equi1, equi2;
+
+	for (int k = 1; k <= 300; k++) {
+		std::string appender;
+		if (k < 10) appender = "000";
+		else if ((k >= 10) && (k < 100)) appender = "00";
+		else if ((k >= 100) && (k < 1000)) appender = "0";
+		else appender = "";
+		std::string outputFilename = folder + "/video_output2/" + appender + std::to_string(k) + ".flo";
+		cv::Mat im1 = cv::imread(folder + "/left/image/Image" + appender + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
+		cv::Mat im2 = cv::imread(folder + "/right2/image/Image" + appender + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
+
+		cv::equalizeHist(im1, equi1);
+		cv::equalizeHist(im2, equi2);
+		//stereotgv->copyImagesToDevice(im1, im2);
+		stereotgv->copyImagesToDevice(equi1, equi2);
+		stereotgv->solveStereoForwardMasked();
+
+		cv::Mat disparity = cv::Mat(stereoHeight, stereoWidth, CV_32FC2);
+		stereotgv->copyDisparityToHost(disparity);
+		cv::writeOpticalFlow(outputFilename, disparity);
+
+		cv::imshow("left", im1);
+		cv::waitKey(1);
+		std::cout << k << std::endl;
+	}
+	cv::waitKey();
+}
+
+int test_SolveTrajectoryPerWarpingBlenderDataAll() {
+	std::string folder = "h:/blender/icra2020";
+	cv::Mat translationVector = cv::readOpticalFlow(folder + "/translationVectorBlender.flo");
+	int stereoWidth = 800;
+	int stereoHeight = 800;
+	cv::Mat calibrationVector = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_32FC2);
+	cv::Mat mask = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_8UC1);
+	circle(mask, cv::Point(stereoWidth / 2, stereoHeight / 2), stereoWidth / 2 - 50, cv::Scalar(256.0f), -1);
+	cv::Mat fisheyeMask;
+	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
+
+	float cx = 400.0f;
+	float cy = 400.0f;
+	float focal = 800.0f / (3.14159265359f);
+	float fov = 3.14159265359f;
+	float tx = -0.06f;
+	float ty = 0.0f;
+	float tz = 0.0f;
+
+	StereoTgv * stereotgv = new StereoTgv();
+	int width = 800;
+	int height = 800;
+	float stereoScaling = 1.0f;
+	int nLevel = 11; // 11 in paper
+	float fScale = 1.2f;
+	int nWarpIters = 50;
+	int nSolverIters = 50;
+	float lambda = 5.0f;
+	stereotgv->limitRange = 0.1f;
+
+
+	float beta = 9.0f;
+	float gamma = 0.85f;
+	float alpha0 = 17.0f;
+	float alpha1 = 1.2f;
+	float timeStepLambda = 1.0f;
+
+	stereotgv->initialize(stereoWidth, stereoHeight, beta, gamma, alpha0, alpha1,
+		timeStepLambda, lambda, nLevel, fScale, nWarpIters, nSolverIters);
+	stereotgv->visualizeResults = true;
+
+	stereotgv->copyMaskToDevice(fisheyeMask);
+	stereotgv->loadVectorFields(translationVector, calibrationVector);
+	cv::Mat equi1, equi2;
+
+	for (int k = 1; k <= 300; k++) {
+		std::string appender;
+		if (k < 10) appender = "000";
+		else if ((k >= 10) && (k < 100)) appender = "00";
+		else if ((k >= 100) && (k < 1000)) appender = "0";
+		else appender = "";
+		std::string outputFilename = folder + "/video_outputactualcurve/" + appender + std::to_string(k) + ".flo";
+		cv::Mat im1 = cv::imread(folder + "/left/" + appender + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
+		cv::Mat im2 = cv::imread(folder + "/right/" + appender + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
+
+		cv::equalizeHist(im1, equi1);
+		cv::equalizeHist(im2, equi2);
+		//stereotgv->copyImagesToDevice(im1, im2);
+		stereotgv->copyImagesToDevice(equi1, equi2);
+		stereotgv->solveStereoTrajectoryPerIteration(fov, cx, cy, tx, ty, tz);
+
+		cv::Mat disparity = cv::Mat(stereoHeight, stereoWidth, CV_32FC2);
+		stereotgv->copyDisparityToHost(disparity);
+		cv::writeOpticalFlow(outputFilename, disparity);
+
+		cv::imshow("left", im1);
+		cv::waitKey(1);
+		std::cout << k << std::endl;
+	}
+}
+
+int test_SolveTrajectoryPerWarpingBlenderData() {
+	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
+	std::string folder = "h:/blender/icra2020";
+	std::string outputFilename = folder + "/outputactualcurve/output11.flo";
+	cv::Mat im1 = cv::imread(folder + "/image/left11.png", cv::IMREAD_GRAYSCALE);
+	cv::Mat im2 = cv::imread(folder + "/image/right11.png", cv::IMREAD_GRAYSCALE);
+	cv::Mat translationVector = cv::readOpticalFlow(folder + "/translationVectorBlender.flo");
+	float cx = 400.0f;
+	float cy = 400.0f;
+	float focal = 800.0f / (3.14159265359f);
+	float fov = 3.14159265359f;
+	float tx = -0.06f;
+	float ty = 0.0f;
+	float tz = 0.0f;
+
+	int stereoWidth = im1.cols;
+	int stereoHeight = im1.rows;
+
+	cv::Mat calibrationVector = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_32FC2);
+	cv::Mat mask = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_8UC1);
+	circle(mask, cv::Point(stereoWidth / 2, stereoHeight / 2), stereoWidth / 2 - 50, cv::Scalar(256.0f), -1);
+	//cv::imwrite("maskBlender.png", mask);
+	//return 0;
+	/*cv::imshow("mask", mask);
+	std::cout << (int)mask.at<unsigned char>(400, 400) << std::endl;
+	cv::waitKey();*/
+	cv::Mat fisheyeMask;
+	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
+
+	StereoTgv * stereotgv = new StereoTgv();
+	int width = 800;
+	int height = 800;
+	float stereoScaling = 1.0f;
+	int nLevel = 11; // 11 in paper
+	float fScale = 1.2f;
+	int nWarpIters = 50;
+	int nSolverIters = 50;
+	float lambda = 5.0f;
+	stereotgv->limitRange = 0.1f;
+
+	float beta = 9.0f;
+	float gamma = 0.85f;
+	float alpha0 = 17.0f;
+	float alpha1 = 1.2f;
+	float timeStepLambda = 1.0f;
+
+	stereotgv->initialize(stereoWidth, stereoHeight, beta, gamma, alpha0, alpha1,
+		timeStepLambda, lambda, nLevel, fScale, nWarpIters, nSolverIters);
+	stereotgv->visualizeResults = true;
+
+	stereotgv->copyMaskToDevice(fisheyeMask);
+	stereotgv->loadVectorFields(translationVector, calibrationVector);
+	cv::Mat equi1, equi2;
+	cv::equalizeHist(im1, equi1);
+	cv::equalizeHist(im2, equi2);
+	//stereotgv->copyImagesToDevice(im1, im2);
+	stereotgv->copyImagesToDevice(equi1, equi2);
+	stereotgv->solveStereoTrajectoryPerIteration(fov, cx, cy, tx, ty, tz);
+
+	cv::Mat disparityVis = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+	stereotgv->copyDisparityVisToHost(disparityVis, 50.0f);
+	cv::imshow("flow", disparityVis);
+
+	cv::Mat disparity = cv::Mat(stereoHeight, stereoWidth, CV_32FC2);
+	stereotgv->copyDisparityToHost(disparity);
+	cv::writeOpticalFlow(outputFilename, disparity);
+	// convert disparity to 3D (depends on the model)
+
+	cv::Mat depthVis;
+	cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+	stereotgv->copyStereoToHost(depth);
+	depth.copyTo(depthVis, mask);
+	showDepthJet("color", depthVis, 5.0f, false);
+
+	cv::Mat warped;
+	stereotgv->copyWarpedImageToHost(warped);
+	cv::imshow("left", im1);
+	cv::imshow("right", im2);
+	cv::imshow("warped", warped);
+	cv::waitKey();
+}
+
 int test_SolveTrajectoryPerWarpingFaro(){
 	std::string folder = "h:/data_icra/";
 
@@ -18,7 +234,7 @@ int test_SolveTrajectoryPerWarpingFaro(){
 	float stereoScaling = 1.0f;
 	int nLevel = 11;
 	float fScale = 1.2f;
-	int nWarpIters = 50;
+	int nWarpIters = 500;
 	int nSolverIters = 50;
 	float lambda = 5.0f;
 	stereotgv->limitRange = 0.1f;
@@ -38,20 +254,23 @@ int test_SolveTrajectoryPerWarpingFaro(){
 	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
 	stereotgv->copyMaskToDevice(fisheyeMask);
 
-	for (int k = 219; k <= 219; k++) {
+	int list[18] = {114, 117, 124, 132, 140, 148, 157, 165, 172, 181, 187, 196, 203, 205, 211, 213, 219, 221};
+	for (int counter = 0; counter < 1 ; counter++) {
+		int k = 203;// list[counter];
 		std::string filename = "im" + std::to_string(k);
 		std::string outputFilename = folder + "outputactualcurve/" + filename + ".flo";
 		cv::Mat im1 = cv::imread(folder + "image_02/data/" + filename + ".png");
 		cv::Mat im2 = cv::imread(folder + "image_03/data/" + filename + ".png");
 		cv::Mat K, R, t;
 		readCalibFileFaro(folder + "calib/" + filename + ".xml", K, R, t);
-		float cx = (float)K.at<double>(0, 2);
-		float cy = (float)K.at<double>(1, 2);
-		float focal = (float)K.at<double>(0, 0);
+		float cx = 400.0f;
+		float cy = 400.0f;
+		float focal = 800.0f / (2.0f * 3.14159265359f / 3.0f);
+		float fov = (2.0f * 3.14159265359f / 3.0f);
 		float tx = (float)t.at<double>(0);
 		float ty = (float)t.at<double>(1);
 		float tz = (float)t.at<double>(2);
-		std::cout << cx << " " << cy << " " << focal << " " << tx << " " << ty << " " << tz << std::endl;
+		//std::cout << cx << " " << cy << " " << focal << " " << tx << " " << ty << " " << tz << std::endl;
 
 		cv::Mat equi1, equi2;
 		cv::cvtColor(im1, im1, cv::COLOR_BGR2GRAY);
@@ -60,18 +279,23 @@ int test_SolveTrajectoryPerWarpingFaro(){
 		cv::equalizeHist(im2, equi2);
 		int stereoWidth = width;
 		int stereoHeight = height;
-		//cv::Mat translationVector = cv::readOpticalFlow(folder + "translationVector/" + filename + ".flo");
-		cv::Mat translationVector = cv::Mat::zeros(im1.size(), CV_32FC2);
+		cv::Mat translationVector = cv::readOpticalFlow(folder + "translationVector/" + filename + ".flo");
+		//cv::Mat translationVector = cv::Mat::zeros(im1.size(), CV_32FC2);
 		cv::Mat calibrationVector = cv::readOpticalFlow(folder + "calibrationVector/" + filename + ".flo");
 
 		stereotgv->loadVectorFields(translationVector, calibrationVector);
 
+		clock_t start = clock();
+
 		stereotgv->copyImagesToDevice(equi1, equi2);
-		stereotgv->solveStereoTrajectoryPerIteration(focal, cx, cy, tx, ty, tz);
+		stereotgv->solveStereoTrajectoryPerIteration(fov, cx, cy, tx, ty, tz);
 
 		cv::Mat disparityVis = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
 		stereotgv->copyDisparityVisToHost(disparityVis, 50.0f);
 		cv::imshow("flow", disparityVis);
+
+		clock_t timeElapsed = (clock() - start);
+		std::cout << "actual time: " << timeElapsed << " ms" << std::endl;
 
 		cv::Mat disparity = cv::Mat(stereoHeight, stereoWidth, CV_32FC2);
 		stereotgv->copyDisparityToHost(disparity);
@@ -110,7 +334,7 @@ int test_BlenderDataAllPlanesweep() {
 	stereotgv->limitRange = 0.2f;
 	stereotgv->planeSweepMaxError = 1000.0f;
 	stereotgv->planeSweepMaxDisparity = (int)(50.0f);
-	stereotgv->planeSweepStride = 0.05f;
+	stereotgv->planeSweepStride = 0.01f;
 	stereotgv->planeSweepWindow = 11;
 	stereotgv->planeSweepEpsilon = 1.0f;
 	//int upsamplingRadius = 5;
@@ -150,7 +374,7 @@ int test_BlenderDataAllPlanesweep() {
 		else if ((k >= 10) && (k < 100)) appender = "00";
 		else if ((k >= 100) && (k < 1000)) appender = "0";
 		else appender = "";
-		std::string outputFilename = folder + "/outputplanesweep/" + appender + std::to_string(k) + ".flo";
+		std::string outputFilename = folder + "/video_outputplanesweep/" + appender + std::to_string(k) + ".flo";
 		cv::Mat im1 = cv::imread(folder + "/left/" + appender + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
 		cv::Mat im2 = cv::imread(folder + "/right/" + appender + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
 
@@ -219,7 +443,7 @@ int test_FaroDataAllPlanesweep() {
 
 	clock_t avetime = 0;
 
-	for (int k = 81; k <= 224; k++) {
+	for (int k = 145; k <= 224; k++) {
 		std::string filename = "im" + std::to_string(k);
 		std::string outputFilename = folder + "outputplanesweep/" + filename + ".flo";
 		cv::Mat im1 = cv::imread(folder + "image_02/data/" + filename + ".png");
@@ -290,7 +514,7 @@ int test_FaroDataAll() {
 	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
 	stereotgv->copyMaskToDevice(fisheyeMask);
 
-	for (int k = 219; k <= 219; k++) {
+	for (int k = 81; k <= 224; k++) {
 		std::string filename = "im" + std::to_string(k);
 		std::string outputFilename = folder + "output/" + filename + ".flo";
 		cv::Mat im1 = cv::imread(folder + "image_02/data/" + filename + ".png");
@@ -307,12 +531,17 @@ int test_FaroDataAll() {
 		
 		stereotgv->loadVectorFields(translationVector, calibrationVector);
 
+		clock_t start = clock();
+
 		stereotgv->copyImagesToDevice(equi1, equi2);
 		stereotgv->solveStereoForwardMasked();
 
 		cv::Mat disparityVis = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
 		stereotgv->copyDisparityVisToHost(disparityVis, 50.0f);
 		cv::imshow("flow", disparityVis);
+
+		clock_t timeElapsed = (clock() - start);
+		std::cout << "ours time: " << timeElapsed << " ms" << std::endl;
 
 		cv::Mat disparity = cv::Mat(stereoHeight, stereoWidth, CV_32FC2);
 		stereotgv->copyDisparityToHost(disparity);
@@ -1561,10 +1790,10 @@ int test_FaroData() {
 
 int test_BlenderData() {
 	//std::string folder = "C:/Users/cvl-menandro/Downloads/rpg_urban_blender.tar/rpg_urban_blender";
-	std::string folder = "D:/dev/blender/icra2020";
-	std::string outputFilename = folder + "/output/output10.flo";
-	cv::Mat im1 = cv::imread(folder + "/image/left10.png", cv::IMREAD_GRAYSCALE);
-	cv::Mat im2 = cv::imread(folder + "/image/right10.png", cv::IMREAD_GRAYSCALE);
+	std::string folder = "h:/blender/icra2020";
+	std::string outputFilename = folder + "/output/output04.flo";
+	cv::Mat im1 = cv::imread(folder + "/image/left04.png", cv::IMREAD_GRAYSCALE);
+	cv::Mat im2 = cv::imread(folder + "/image/right04.png", cv::IMREAD_GRAYSCALE);
 	cv::Mat translationVector = cv::readOpticalFlow(folder + "/translationVectorBlender.flo");
 	int stereoWidth = im1.cols;
 	int stereoHeight = im1.rows;
@@ -1611,7 +1840,6 @@ int test_BlenderData() {
 	stereotgv->copyImagesToDevice(equi1, equi2);
 	stereotgv->solveStereoForwardMasked();
 
-	
 	cv::Mat disparityVis = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
 	stereotgv->copyDisparityVisToHost(disparityVis, 50.0f);
 	cv::imshow("flow", disparityVis);

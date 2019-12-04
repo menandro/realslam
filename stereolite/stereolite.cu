@@ -38,7 +38,7 @@ void DEBUGDEPTH(std::string windowName, float* disparity, float baseline, float 
 }
 
 StereoLite::StereoLite() {
-	this->BlockHeight = 12;
+	this->BlockHeight = 1;
 	this->BlockWidth = 32;
 	this->StrideAlignment = 32;
 }
@@ -277,13 +277,13 @@ int StereoLite::solveStereoForwardMasked() {
 			ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvForward[level],
 				pW[level], pH[level], pS[level], d_Iu, d_Iz);
 
-			Clone(d_u_last, pW[level], pH[level], pS[level], d_u_);
+			Clone(d_u_, d_u_last, pW[level], pH[level], pS[level]);
 
 			// Inner iteration
 			for (int iter = 0; iter < nSolverIters; iter++) {
 				// Solve Problem1A
-				ThresholdingL1Masked(pFisheyeMask[level], d_u, d_u_, d_Iu, d_Iz, lambda, theta, d_us, pW[level], pH[level], pS[level]);
-				Swap(d_u, d_us);
+				ThresholdingL1Masked(pFisheyeMask[level], d_u, d_u_, d_Iu, d_Iz, lambda, theta, pW[level], pH[level], pS[level]);
+				//Swap(d_u, d_us);
 
 				// Solve Problem1B
 				SolveProblem1bMasked(pFisheyeMask[level], d_u, d_p, theta, d_u_, pW[level], pH[level], pS[level]);
@@ -292,10 +292,13 @@ int StereoLite::solveStereoForwardMasked() {
 				SolveProblem2Masked(pFisheyeMask[level], d_u_, d_p, theta, tau, d_ps, pW[level], pH[level], pS[level]);
 				Swap(d_p, d_ps);
 			}
+			MedianFilterDisparity(d_u, pW[level], pH[level], pS[level], d_us, 5);
+			Swap(d_u, d_us);
+
 			Subtract(d_u_, d_u_last, pW[level], pH[level], pS[level], d_du);
 			LimitRange(d_du, limitRange, pW[level], pH[level], pS[level], d_du);
 			Add(d_u_last, d_du, pW[level], pH[level], pS[level], d_u_);
-			Clone(d_u, pW[level], pH[level], pS[level], d_u_);
+			Clone(d_u_, d_u, pW[level], pH[level], pS[level]);
 
 			ComputeOpticalFlowVector(d_du, d_tv2, pW[level], pH[level], pS[level], d_dwarpUV);
 			Add(d_warpUV, d_dwarpUV, pW[level], pH[level], pS[level], d_warpUV);
@@ -321,6 +324,87 @@ int StereoLite::solveStereoForwardMasked() {
 	return 0;
 }
 
+//int StereoLite::solveStereoForwardMasked() {
+//	// Warp i1 using vector fields=
+//	WarpImage(pI1[0], width, height, stride, d_cv, d_i1calibrated);
+//	Swap(pI1[0], d_i1calibrated);
+//
+//	checkCudaErrors(cudaMemset(d_u, 0, dataSize32f));
+//	checkCudaErrors(cudaMemset(d_u_, 0, dataSize32f));
+//	checkCudaErrors(cudaMemset(d_u_last, 0, dataSize32f));
+//	checkCudaErrors(cudaMemset(d_warpUV, 0, dataSize32fc2));
+//
+//	// Construct pyramid
+//	for (int level = 1; level < nLevels; level++) {
+//		Downscale(pI0[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
+//			pW[level], pH[level], pS[level], pI0[level]);
+//		Downscale(pI1[level - 1], pW[level - 1], pH[level - 1], pS[level - 1],
+//			pW[level], pH[level], pS[level], pI1[level]);
+//	}
+//
+//	// Solve stereo
+//	for (int level = nLevels - 1; level >= 0; level--) {
+//		if (level == nLevels - 1) {
+//			ComputeOpticalFlowVector(d_u, pTvForward[level], pW[level], pH[level], pS[level], d_warpUV);
+//		}
+//
+//		for (int warpIter = 0; warpIter < nWarpIters; warpIter++) {
+//			checkCudaErrors(cudaMemset(d_p, 0, dataSize32fc2));
+//			checkCudaErrors(cudaMemset(d_du, 0, dataSize32f));
+//
+//			FindWarpingVector(d_warpUV, pTvForward[level], pW[level], pH[level], pS[level], d_tv2);
+//			WarpImage(pI1[level], pW[level], pH[level], pS[level], d_warpUV, d_i1warp);
+//
+//			ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvForward[level],
+//				pW[level], pH[level], pS[level], d_Iu, d_Iz);
+//
+//			Clone(d_u_, d_u_last, pW[level], pH[level], pS[level]);
+//
+//			// Inner iteration
+//			for (int iter = 0; iter < nSolverIters; iter++) {
+//				// Solve Problem1A
+//				ThresholdingL1Masked(pFisheyeMask[level], d_u, d_u_, d_Iu, d_Iz, lambda, theta, 
+//					pW[level], pH[level], pS[level]);
+//
+//				// Solve Problem1B
+//				SolveProblem1bMasked(pFisheyeMask[level], d_u, d_p, theta, d_u_, pW[level], pH[level], pS[level]);
+//
+//				// Solve Problem2
+//				SolveProblem2Masked(pFisheyeMask[level], d_u_, d_p, theta, tau, d_ps, pW[level], pH[level], pS[level]);
+//				Swap(d_p, d_ps);
+//			}
+//			//MedianFilterDisparity(d_u, pW[level], pH[level], pS[level], d_us, 5);
+//			//Swap(d_u, d_us);
+//
+//			Subtract(d_u_, d_u_last, pW[level], pH[level], pS[level], d_du);
+//			LimitRange(d_du, limitRange, pW[level], pH[level], pS[level], d_du);
+//			Add(d_u_last, d_du, pW[level], pH[level], pS[level], d_u_);
+//			Clone(d_u_, d_u, pW[level], pH[level], pS[level]);
+//
+//			ComputeOpticalFlowVector(d_du, d_tv2, pW[level], pH[level], pS[level], d_dwarpUV);
+//			Add(d_warpUV, d_dwarpUV, pW[level], pH[level], pS[level], d_warpUV);
+//		}
+//
+//		// Upscale
+//		if (level > 0)
+//		{
+//			float scale = fScale;
+//			Upscale(d_u, pW[level], pH[level], pS[level],
+//				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_us);
+//			Upscale(d_u_, pW[level], pH[level], pS[level],
+//				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_u_s);
+//			Upscale(d_warpUV, pW[level], pH[level], pS[level],
+//				pW[level - 1], pH[level - 1], pS[level - 1], scale, d_warpUVs);
+//
+//			Swap(d_u, d_us);
+//			Swap(d_u_, d_u_s);
+//			Swap(d_warpUV, d_warpUVs);
+//		}
+//	}
+//
+//	return 0;
+//}
+
 int StereoLite::copyStereoToHost(cv::Mat &wCropped) {
 	// Convert Disparity to Depth
 	ConvertDisparityToDepth(d_u, baseline, focal, width, height, stride, d_depth);
@@ -341,7 +425,7 @@ int StereoLite::planeSweepForward() {
 	checkCudaErrors(cudaMemset(ps_error, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_disparityForward, 0, dataSize32f));
-	Clone(ps_i1warp, pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel], pI1[planeSweepLevel]);
+	Clone(pI1[planeSweepLevel], ps_i1warp, pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel]);
 	SetValue(ps_error, planeSweepMaxError, pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel]);
 	for (int sweep = 0; sweep < planeSweepMaxDisparity; sweep += planeSweepStride) {
 		PlaneSweepCorrelation(ps_i1warp, pI0[planeSweepLevel], ps_disparityForward, sweep, planeSweepWindow,
@@ -360,7 +444,7 @@ int StereoLite::planeSweepBackward() {
 	checkCudaErrors(cudaMemset(ps_error, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_disparityBackward, 0, dataSize32f));
-	Clone(ps_i1warp, pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel], pI0[planeSweepLevel]);
+	Clone(pI0[planeSweepLevel], ps_i1warp, pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel]);
 	SetValue(ps_error, planeSweepMaxError, pW[planeSweepLevel], pH[planeSweepLevel], pS[planeSweepLevel]);
 	for (int sweep = 0; sweep < planeSweepMaxDisparity; sweep += planeSweepStride) {
 		PlaneSweepCorrelation(ps_i1warp, pI1[planeSweepLevel], ps_disparityBackward, sweep, planeSweepWindow,
@@ -383,7 +467,7 @@ int StereoLite::planeSweep() {
 	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_disparityForward, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_currentWarpForward, 0, dataSize32fc2));
-	Clone(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], pI1[lvl]);
+	Clone(pI1[lvl], ps_i1warp, pW[lvl], pH[lvl], pS[lvl]);
 	SetValue(ps_error, planeSweepMaxError, pW[lvl], pH[lvl], pS[lvl]);
 	SetValue(ps_meanError, 0.0f, pW[lvl], pH[lvl], pS[lvl]);
 	for (int sweep = 0; sweep <= planeSweepMaxDisparity; sweep += planeSweepStride) {
@@ -401,7 +485,7 @@ int StereoLite::planeSweep() {
 	checkCudaErrors(cudaMemset(ps_error, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_disparityBackward, 0, dataSize32f));
-	Clone(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], pI0[lvl]);
+	Clone(pI0[lvl], ps_i1warp, pW[lvl], pH[lvl], pS[lvl]);
 	SetValue(ps_error, planeSweepMaxError, pW[lvl], pH[lvl], pS[lvl]);
 	SetValue(ps_meanError, 0.0f, pW[lvl], pH[lvl], pS[lvl]);
 	for (int sweep = 0; sweep <= planeSweepMaxDisparity; sweep += planeSweepStride) {
@@ -434,7 +518,7 @@ int StereoLite::planeSweepSubpixel() {
 	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_disparityForward, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_currentWarpForward, 0, dataSize32fc2));
-	Clone(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], pI1[lvl]);
+	Clone(pI1[lvl], ps_i1warp, pW[lvl], pH[lvl], pS[lvl]);
 	SetValue(ps_error, planeSweepMaxError, pW[lvl], pH[lvl], pS[lvl]);
 	SetValue(ps_meanError, 0.0f, pW[lvl], pH[lvl], pS[lvl]);
 	for (float sweep = 0; sweep <= planeSweepMaxDisparity; sweep += planeSweepStride) {
@@ -459,7 +543,7 @@ int StereoLite::planeSweepSubpixel() {
 	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_disparityBackward, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(ps_currentWarpBackward, 0, dataSize32fc2));
-	Clone(ps_i1warp, pW[lvl], pH[lvl], pS[lvl], pI0[lvl]);
+	Clone(pI0[lvl], ps_i1warp, pW[lvl], pH[lvl], pS[lvl]);
 	SetValue(ps_error, planeSweepMaxError, pW[lvl], pH[lvl], pS[lvl]);
 	SetValue(ps_meanError, 0.0f, pW[lvl], pH[lvl], pS[lvl]);
 	for (float sweep = 0; sweep <= planeSweepMaxDisparity; sweep += planeSweepStride) {
@@ -571,9 +655,9 @@ int StereoLite::planeSweepPropagationL1Refinement(int upsamplingRadius) {
 	}
 	
 
-	Clone(d_warpUV, pW[level], pH[level], pS[level], ps_finalWarpForward);
-	Clone(d_u_, pW[level], pH[level], pS[level], ps_disparityFinal);
-	Clone(d_u, pW[level], pH[level], pS[level], ps_disparityFinal);
+	Clone(ps_finalWarpForward, d_warpUV, pW[level], pH[level], pS[level]);
+	Clone(ps_disparityFinal, d_u_, pW[level], pH[level], pS[level]);
+	Clone(ps_disparityFinal, d_u, pW[level], pH[level], pS[level]);
 
 	for (int warpIter = 0; warpIter < nWarpIters; warpIter++) {
 		checkCudaErrors(cudaMemset(d_p, 0, dataSize32fc2));
@@ -585,13 +669,14 @@ int StereoLite::planeSweepPropagationL1Refinement(int upsamplingRadius) {
 		ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvForward[level],
 			pW[level], pH[level], pS[level], d_Iu, d_Iz);
 
-		Clone(d_u_last, pW[level], pH[level], pS[level], d_u_);
+		Clone(d_u_, d_u_last, pW[level], pH[level], pS[level]);
 
 		// Inner iteration
 		for (int iter = 0; iter < nSolverIters; iter++) {
 			// Solve Problem1A
-			ThresholdingL1Masked(pFisheyeMask[level], d_u, d_u_, d_Iu, d_Iz, lambda, theta, d_us, pW[level], pH[level], pS[level]);
-			Swap(d_u, d_us);
+			ThresholdingL1Masked(pFisheyeMask[level], d_u, d_u_, d_Iu, d_Iz, lambda, theta, 
+				pW[level], pH[level], pS[level]);
+			//Swap(d_u, d_us);
 
 			// Solve Problem1B
 			SolveProblem1bMasked(pFisheyeMask[level], d_u, d_p, theta, d_u_, pW[level], pH[level], pS[level]);
@@ -607,7 +692,7 @@ int StereoLite::planeSweepPropagationL1Refinement(int upsamplingRadius) {
 		
 		
 
-		Clone(d_u, pW[level], pH[level], pS[level], d_u_);
+		Clone(d_u_, d_u, pW[level], pH[level], pS[level]);
 
 		ComputeOpticalFlowVector(d_du, d_tv2, pW[level], pH[level], pS[level], d_dwarpUV);
 		Add(d_warpUV, d_dwarpUV, pW[level], pH[level], pS[level], d_warpUV);
@@ -624,9 +709,9 @@ int StereoLite::planeSweepL1upsamplingAndRefinement() {
 	planeSweep();
 	int level = 0;
 
-	Clone(d_warpUV, pW[level], pH[level], pS[level], ps_finalWarpForward);
-	Clone(d_u_, pW[level], pH[level], pS[level], ps_disparityFinal);
-	Clone(d_u, pW[level], pH[level], pS[level], ps_disparityFinal);
+	Clone(ps_finalWarpForward, d_warpUV, pW[level], pH[level], pS[level]);
+	Clone(ps_disparityFinal, d_u_, pW[level], pH[level], pS[level]);
+	Clone(ps_disparityFinal, d_u, pW[level], pH[level], pS[level]);
 	GetMask(ps_disparityFinal, d_lambdaMask, true, pW[level], pH[level], pS[level]);
 
 	//// Run TVL1
@@ -640,7 +725,7 @@ int StereoLite::planeSweepL1upsamplingAndRefinement() {
 		ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvForward[level],
 			pW[level], pH[level], pS[level], d_Iu, d_Iz);
 
-		Clone(d_u_last, pW[level], pH[level], pS[level], d_u_);
+		Clone(d_u_, d_u_last, pW[level], pH[level], pS[level]);
 
 		// Inner iteration
 		for (int iter = 0; iter < nSolverIters; iter++) {
@@ -663,7 +748,7 @@ int StereoLite::planeSweepL1upsamplingAndRefinement() {
 		//Subtract(d_u_, d_u_last, pW[level], pH[level], pS[level], d_du);
 		//LimitRange(d_du, limitRange, pW[level], pH[level], pS[level], d_du);
 		//Add(d_u_last, d_du, pW[level], pH[level], pS[level], d_u_);
-		Clone(d_u, pW[level], pH[level], pS[level], d_u_);
+		Clone(d_u_, d_u, pW[level], pH[level], pS[level]);
 
 		ComputeOpticalFlowVector(d_du, d_tv2, pW[level], pH[level], pS[level], d_dwarpUV);
 		Add(d_warpUV, d_dwarpUV, pW[level], pH[level], pS[level], d_warpUV);
@@ -675,9 +760,9 @@ int StereoLite::planeSweepL2upsamplingL1Refinement() {
 	planeSweep();
 	int level = 0;
 
-	Clone(d_warpUV, pW[level], pH[level], pS[level], ps_finalWarpForward);
-	Clone(d_u_, pW[level], pH[level], pS[level], ps_disparityFinal);
-	Clone(d_u, pW[level], pH[level], pS[level], ps_disparityFinal);
+	Clone(ps_finalWarpForward, d_warpUV, pW[level], pH[level], pS[level]);
+	Clone(ps_disparityFinal, d_u_, pW[level], pH[level], pS[level]);
+	Clone(ps_disparityFinal, d_u, pW[level], pH[level], pS[level]);
 	GetMask(ps_disparityFinal, d_lambdaMask, true, pW[level], pH[level], pS[level]);
 
 	// One set of iteration to fill holes
@@ -759,8 +844,8 @@ int StereoLite::planeSweepL2upsamplingL1Refinement() {
 }
 
 int StereoLite::planeSweepPyramidL1Refinement() {
-	planeSweep();
-	Clone(pSparsePrior[0], pW[0], pH[0], pS[0], ps_disparityFinal);
+	planeSweepSubpixel();
+	Clone(ps_disparityFinal, pSparsePrior[0], pW[0], pH[0], pS[0]);
 	
 	checkCudaErrors(cudaMemset(d_u, 0, dataSize32f));
 	checkCudaErrors(cudaMemset(d_u_, 0, dataSize32f));
@@ -797,7 +882,7 @@ int StereoLite::planeSweepPyramidL1Refinement() {
 			ComputeDerivativesFisheye(pI0[level], d_i1warp, pTvForward[level],
 				pW[level], pH[level], pS[level], d_Iu, d_Iz);
 
-			Clone(d_u_last, pW[level], pH[level], pS[level], d_u_);
+			Clone(d_u_, d_u_last, pW[level], pH[level], pS[level]);
 
 			// Inner iteration
 			int solverIters;
@@ -826,7 +911,7 @@ int StereoLite::planeSweepPyramidL1Refinement() {
 			Add(d_u_last, d_du, pW[level], pH[level], pS[level], d_u_);
 			//MedianFilterDisparity(d_u_, pW[level], pH[level], pS[level], d_u_, 5);
 			
-			Clone(d_u, pW[level], pH[level], pS[level], d_u_);
+			Clone(d_u_, d_u, pW[level], pH[level], pS[level]);
 
 			ComputeOpticalFlowVector(d_du, d_tv2, pW[level], pH[level], pS[level], d_dwarpUV);
 			Add(d_warpUV, d_dwarpUV, pW[level], pH[level], pS[level], d_warpUV);

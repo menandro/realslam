@@ -144,8 +144,8 @@ __global__ void TgvFindWarpingVectorEquidistantFloat2Kernel(const float2 *warpUV
 	const int pos = ix + iy * stride;
 
 	if (ix >= width || iy >= height) return;
-	float u0 = ix + warpUV[pos].x;
-	float v0 = iy + warpUV[pos].y;
+	float u0 = ix + warpUV[pos].x + 1;
+	float v0 = iy + warpUV[pos].y + 1;
 
 	//float x = ((float)ix + warpUV[pos].x + 0.5f) / (float)width;
 	//float y = ((float)iy + warpUV[pos].y + 0.5f) / (float)height;
