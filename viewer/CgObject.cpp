@@ -16,6 +16,7 @@ CgObject::CgObject() {
 }
 
 void CgObject::bindBuffer() {
+	//std::cout << "VAO: " << this->vao << std::endl;
 	glBindVertexArray(this->vao);
 }
 
@@ -24,15 +25,16 @@ void CgObject::loadShader(const char *vertexShader, const char *fragmentShader) 
 }
 
 void CgObject::loadData(std::vector<float> vertices, std::vector<unsigned int> indices) {
-	arrayFormat = ArrayFormat::VERTEX_NORMAL_TEXTURE;
-	loadData(vertices, indices, arrayFormat);
+	this->arrayFormat = ArrayFormat::VERTEX_NORMAL_TEXTURE;
+	loadData(vertices, indices, this->arrayFormat);
 }
 
 void CgObject::loadData(std::vector<float> vertices, std::vector<unsigned int> indices, ArrayFormat arrayFormat) {
 	nTriangles = indices.size();
+	this->arrayFormat = arrayFormat;
 	this->bindBuffer();
 
-	if (arrayFormat == ArrayFormat::VERTEX_NORMAL_TEXTURE) {
+	if (this->arrayFormat == ArrayFormat::VERTEX_NORMAL_TEXTURE) {
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
 
@@ -52,7 +54,7 @@ void CgObject::loadData(std::vector<float> vertices, std::vector<unsigned int> i
 		glEnableVertexAttribArray(2);
 	}
 
-	else if (arrayFormat == ArrayFormat::VERTEX_TEXTURE) {
+	else if (this->arrayFormat == ArrayFormat::VERTEX_TEXTURE) {
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
 
@@ -70,6 +72,16 @@ void CgObject::loadData(std::vector<float> vertices, std::vector<unsigned int> i
 		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
 		glEnableVertexAttribArray(1);
 	}
+}
+
+void CgObject::updateData(std::vector<float> vertices, std::vector<unsigned int> indices) {
+	updatedVertexArray = vertices;
+	updatedIndexArray = indices;
+	needsUpdate = true;
+}
+
+void CgObject::loadUpdatedData() {
+	loadData(updatedVertexArray, updatedIndexArray, this->arrayFormat);
 }
 
 void CgObject::loadTexture(std::string filename) {

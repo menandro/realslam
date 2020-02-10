@@ -5,24 +5,31 @@ int Tslam::initStereoTVL1() {
 	stereoScaling = 2.0f;
 	int nLevel = 5;
 	float fScale = 2.0f;
-	int nWarpIters = 30;
-	int nSolverIters = 10;
-	float lambda = 1.0f;
+	int nWarpIters = 10;
+	int nSolverIters = 50;
+	float lambda = 0.5f;
 	float theta = 0.33f;
 	float tau = 0.125f;
-	stereolite->limitRange = 0.2f;
+	stereolite->limitRange = 1.0f;
+
+	// Planesweep settings
 	stereolite->planeSweepMaxError = 1000.0f;
 	stereolite->planeSweepMaxDisparity = (int)(50.0f / stereoScaling);
 	stereolite->planeSweepStride = 0.5f;
 	stereolite->planeSweepWindow = 11;
 	stereolite->planeSweepEpsilon = 1.0f;
-	stereolite->l2lambda = 0.5f;
+
+	// Planesweep + TVL1 settings
+	stereolite->l2lambda = 0.1f;
 
 	stereoWidth = (int)(t265.width / stereoScaling);
 	stereoHeight = (int)(t265.height / stereoScaling);
 	stereolite->baseline = 0.0642f;
 	stereolite->focal = 285.8557f / stereoScaling;
 	stereolite->initialize(stereoWidth, stereoHeight, lambda, theta, tau, nLevel, fScale, nWarpIters, nSolverIters);
+
+	pcX = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+	pcXMasked = cv::Mat::zeros(stereoHeight, stereoWidth, CV_32FC3);
 
 	// Load vector fields
 	cv::Mat translationVector, calibrationVector;
@@ -56,6 +63,7 @@ int Tslam::solveStereoTVL1() {
 	cv::Mat equi1, equi2;
 	cv::equalizeHist(t265.fisheye1, equi1);
 	cv::equalizeHist(t265.fisheye2, equi2);
+	cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
 
 	if (stereoScaling == 2.0f) {
 		cv::Mat halfFisheye1, halfFisheye2;
@@ -67,19 +75,29 @@ int Tslam::solveStereoTVL1() {
 		stereolite->copyImagesToDevice(halfFisheye1, halfFisheye2);
 
 		// Planesweep with TVL1 refinement
-		stereolite->planeSweepPyramidL1Refinement();
-		stereolite->copyStereoToHost(t265.depthHalf32f);
+		//stereolite->planeSweepPyramidL1Refinement();
+		//stereolite->copyStereoToHost(t265.depthHalf32f);
 
 		// Just planesweep
 		//stereolite->planeSweepSubpixel();
-		//stereolite->copyPlanesweepFinalToHost(t265.depthHalf32f);
+		stereolite->planeSweepExponentialDistance();
+		stereolite->copyPlanesweepFinalToHost(t265.depthHalf32f, pcX, 285.722f / stereoScaling, 286.759f / stereoScaling,
+			420.135f / stereoScaling, 403.394 / stereoScaling,
+			-0.00659769f, 0.0473251f, -0.0458264f, 0.00897725f,
+			-0.0641854f, -0.000218299f, 0.000111253f);
 
 		// Just TVL1
 		//stereolite->solveStereoForwardMasked();
-		//stereolite->copyStereoToHost(t265.depthHalf32f);
+		//stereolite->copyStereoToHost(t265.depthHalf32f, pcX, 285.722f / stereoScaling, 286.759f / stereoScaling,
+		//	420.135f / stereoScaling, 403.394 / stereoScaling,
+		//	-0.00659769f, 0.0473251f, -0.0458264f, 0.00897725f,
+		//	-0.0641854f, -0.000218299f, 0.000111253f);
 
 		clock_t timeElapsed = (clock() - start);
 		//std::cout << "time: " << timeElapsed << " ms" << std::endl;
+
+		pcX.copyTo(pcXMasked, fisheyeMask8);
+		cv::imshow("X", pcXMasked);
 
 		cv::Mat depthVis;
 		t265.depthHalf32f.copyTo(t265.depthHalf32f, fisheyeMask8Half);

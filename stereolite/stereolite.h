@@ -86,6 +86,7 @@ public:
 
 	// 3D
 	float3 *d_X;
+	cv::Mat X;
 
 	// Debug
 	float *debug_depth;
@@ -97,18 +98,28 @@ public:
 	int loadVectorFields(cv::Mat translationVector, cv::Mat calibrationVector);
 	int solveStereoForwardMasked();
 	int copyStereoToHost(cv::Mat &wCropped);
+	int copyStereoToHost(cv::Mat &croppedDepth, cv::Mat &croppedX, float focalx, float focaly,
+		float cx, float cy, float d1, float d2, float d3, float d4,
+		float t1, float t2, float t3);
+	int copyDisparityToHost(cv::Mat &wCropped);
+	int copyDisparityVisToHost(cv::Mat &wCropped, float flowScale);
 	int copyPlanesweepForwardToHost(cv::Mat &wCropped);
 	int copyPlanesweepBackwardToHost(cv::Mat &wCropped);
 	int copyPlanesweepFinalToHost(cv::Mat &wCropped);
+	int copyPlanesweepFinalToHost(cv::Mat &croppedDepth, cv::Mat &croppedX, float focalx, float focaly,
+		float cx, float cy, float d1, float d2, float d3, float d4,
+		float t1, float t2, float t3);
 	int copyPlanesweepDisparityToHost(cv::Mat &wCropped);
 	int copyPropagatedDisparityToHost(cv::Mat &wCropped);
 	int copyPlanesweepDisparityVisToHost(cv::Mat &wCropped, float flowScale);
+
 
 	// Planesweep
 	int planeSweepForward();
 	int planeSweepBackward();
 	int planeSweep();
 	int planeSweepSubpixel();
+	int planeSweepExponentialDistance();
 	float * ps_i1warp;
 	float * ps_i1warps;
 	float * ps_error;
@@ -179,6 +190,9 @@ public:
 	void SolveProblem2Masked(float* mask, float* u, float2 *p, float theta, float tau,
 		float2* ps, int w, int h, int s);
 
+	void ConvertKB(float2 *disparity, float focalx, float focaly, float cx, float cy,
+		float d1, float d2, float d3, float d4, float t1, float t2, float t3,
+		float3 *X, float* depth, int w, int h, int s);
 	void ConvertDisparityToDepth(float *disparity, float baseline, float focal, int w, int h, int s, float *depth);
 	void FlowToHSV(float2* uv, int w, int h, int s, float3 * uRGB, float flowscale);
 	void MedianFilter(float *inputu, float *inputv, int w, int h, int s,

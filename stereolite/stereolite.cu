@@ -164,6 +164,7 @@ int StereoLite::initialize(int width, int height, float lambda, float theta, flo
 
 	// 3D
 	checkCudaErrors(cudaMalloc(&d_X, dataSize32fc3));
+	X = cv::Mat(height, stride, CV_32FC3);
 
 	// Debugging
 	checkCudaErrors(cudaMalloc(&debug_depth, dataSize32f));
@@ -292,8 +293,8 @@ int StereoLite::solveStereoForwardMasked() {
 				SolveProblem2Masked(pFisheyeMask[level], d_u_, d_p, theta, tau, d_ps, pW[level], pH[level], pS[level]);
 				Swap(d_p, d_ps);
 			}
-			MedianFilterDisparity(d_u, pW[level], pH[level], pS[level], d_us, 5);
-			Swap(d_u, d_us);
+			//MedianFilterDisparity(d_u, pW[level], pH[level], pS[level], d_us, 5);
+			//Swap(d_u, d_us);
 
 			Subtract(d_u_, d_u_last, pW[level], pH[level], pS[level], d_du);
 			LimitRange(d_du, limitRange, pW[level], pH[level], pS[level], d_du);
@@ -417,6 +418,40 @@ int StereoLite::copyStereoToHost(cv::Mat &wCropped) {
 	return 0;
 }
 
+int StereoLite::copyStereoToHost(cv::Mat &croppedDepth, cv::Mat &croppedX, float focalx, float focaly,
+	float cx, float cy, float d1, float d2, float d3, float d4,
+	float t1, float t2, float t3) {
+	// Convert Disparity to Depth/3D
+	ConvertKB(d_warpUV, focalx, focaly, cx, cy, d1, d2, d3, d4, t1, t2, t3, d_X, d_depth, width, height, stride);
+
+	// Remove Padding
+	checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_depth, dataSize32f, cudaMemcpyDeviceToHost));
+	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
+	croppedDepth = depth(roi);
+
+	checkCudaErrors(cudaMemcpy((float3 *)X.ptr(), d_X, dataSize32fc3, cudaMemcpyDeviceToHost));
+	croppedX = X(roi);
+	return 0;
+}
+
+int StereoLite::copyDisparityToHost(cv::Mat &wCropped) {
+	// Remove Padding
+	//checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_w, stride * height * sizeof(float), cudaMemcpyDeviceToHost));
+	checkCudaErrors(cudaMemcpy((float2 *)warpUV.ptr(), d_warpUV, dataSize32fc2, cudaMemcpyDeviceToHost));
+	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
+	wCropped = warpUV(roi);
+	return 0;
+}
+
+int StereoLite::copyDisparityVisToHost(cv::Mat &wCropped, float flowScale) {
+	// Remove Padding
+	FlowToHSV(d_warpUV, width, height, stride, d_uvrgb, flowScale);
+	checkCudaErrors(cudaMemcpy((float3 *)warpUVrgb.ptr(), d_uvrgb, dataSize32fc3, cudaMemcpyDeviceToHost));
+	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
+	wCropped = warpUVrgb(roi);
+	return 0;
+}
+
 
 // PlaneSweep
 int StereoLite::planeSweepForward() {
@@ -533,7 +568,15 @@ int StereoLite::planeSweepSubpixel() {
 		Swap(ps_i1warp, ps_i1warps);
 		//DEBUGWARPIMAGE("dd", ps_i1warp, pH[lvl], pS[lvl], false, false);
 		//cv::waitKey(1);
+		//std::cout << sweep << " ";
 	}
+	//std::cout << std::endl;
+
+	/*MedianFilterDisparity(ps_disparityForward, pW[lvl], pH[lvl], pS[lvl], ps_disparityForward, 5);
+	MedianFilterDisparity(ps_disparityForward, pW[lvl], pH[lvl], pS[lvl], ps_disparityForward, 5);
+	MedianFilterDisparity(ps_disparityForward, pW[lvl], pH[lvl], pS[lvl], ps_disparityForward, 5);
+	MedianFilterDisparity(ps_disparityForward, pW[lvl], pH[lvl], pS[lvl], ps_disparityForward, 5);*/
+	//Swap(d_u, d_us);
 
 	/*DEBUGWARPIMAGE("meanerror", ps_meanError, pH[lvl], pS[lvl], false, false);
 	DEBUGWARPIMAGE("error", ps_error, pH[lvl], pS[lvl], false, true);*/
@@ -561,7 +604,66 @@ int StereoLite::planeSweepSubpixel() {
 		Swap(ps_i1warp, ps_i1warps);
 		
 	}
+	/*MedianFilterDisparity(ps_disparityBackward, pW[lvl], pH[lvl], pS[lvl], ps_disparityBackward, 5);
+	MedianFilterDisparity(ps_disparityBackward, pW[lvl], pH[lvl], pS[lvl], ps_disparityBackward, 5);
+	MedianFilterDisparity(ps_disparityBackward, pW[lvl], pH[lvl], pS[lvl], ps_disparityBackward, 5);
+	MedianFilterDisparity(ps_disparityBackward, pW[lvl], pH[lvl], pS[lvl], ps_disparityBackward, 5);*/
+	// Left-Right Consistency
+	LeftRightConsistency(ps_disparityForward, ps_disparityBackward, ps_warpForward, planeSweepEpsilon,
+		ps_disparityFinal, ps_finalWarpForward, pW[lvl], pH[lvl], pS[lvl]);
 
+	return 0;
+}
+
+int StereoLite::planeSweepExponentialDistance() {
+	// Forward
+	int lvl = 0;
+	WarpImage(pI1[0], width, height, stride, d_cv, d_i1calibrated);
+	Swap(pI1[0], d_i1calibrated);
+
+	checkCudaErrors(cudaMemset(ps_error, 0, dataSize32f));
+	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize32f));
+	checkCudaErrors(cudaMemset(ps_disparityForward, 0, dataSize32f));
+	checkCudaErrors(cudaMemset(ps_currentWarpForward, 0, dataSize32fc2));
+	Clone(pI1[lvl], ps_i1warp, pW[lvl], pH[lvl], pS[lvl]);
+	SetValue(ps_error, planeSweepMaxError, pW[lvl], pH[lvl], pS[lvl]);
+	SetValue(ps_meanError, 0.0f, pW[lvl], pH[lvl], pS[lvl]);
+
+	float currStride = 0.0f;
+	float sweep = 0.0f;
+	for (int k = 1; k <= 75; k++) {
+		float sweepStride = 1.843f*expf(0.03931f * (float)k) - currStride;
+		PlaneSweepCorrelationGetWarp(ps_i1warp, pI0[lvl], ps_disparityForward, sweep, sweepStride, planeSweepWindow,
+			ps_currentWarpForward, ps_warpForward, d_tvForward, pW[lvl], pH[lvl], pS[lvl], ps_error);
+		WarpImage(pI1[lvl], pW[lvl], pH[lvl], pS[lvl], ps_warpForward, ps_i1warps);
+		Swap(ps_i1warp, ps_i1warps);
+		sweep = 1.843f*expf(0.03931f * (float)k);
+		currStride = sweep;
+		//std::cout << sweep << " ";
+	}
+	//std::cout << std::endl;
+
+	// Backward
+	checkCudaErrors(cudaMemset(ps_error, 0, dataSize32f));
+	checkCudaErrors(cudaMemset(ps_depth, 0, dataSize32f));
+	checkCudaErrors(cudaMemset(ps_disparityBackward, 0, dataSize32f));
+	checkCudaErrors(cudaMemset(ps_currentWarpBackward, 0, dataSize32fc2));
+	Clone(pI0[lvl], ps_i1warp, pW[lvl], pH[lvl], pS[lvl]);
+	SetValue(ps_error, planeSweepMaxError, pW[lvl], pH[lvl], pS[lvl]);
+	SetValue(ps_meanError, 0.0f, pW[lvl], pH[lvl], pS[lvl]);
+
+	currStride = 0.0f;
+	sweep = 0.0f;
+	for (int k = 1; k <= 75; k++) {
+		float sweepStride = 1.843f*expf(0.03931f * (float)k) - currStride;
+		PlaneSweepCorrelationGetWarp(ps_i1warp, pI1[lvl], ps_disparityBackward, sweep, sweepStride,
+			planeSweepWindow, ps_currentWarpBackward, ps_warpBackward, d_tvBackward,
+			pW[lvl], pH[lvl], pS[lvl], ps_error);
+		WarpImage(pI0[lvl], pW[lvl], pH[lvl], pS[lvl], ps_warpBackward, ps_i1warps);
+		Swap(ps_i1warp, ps_i1warps);
+		sweep = 1.843f*expf(0.03931f * (float)k);
+		currStride = sweep;
+	}
 	// Left-Right Consistency
 	LeftRightConsistency(ps_disparityForward, ps_disparityBackward, ps_warpForward, planeSweepEpsilon,
 		ps_disparityFinal, ps_finalWarpForward, pW[lvl], pH[lvl], pS[lvl]);
@@ -602,6 +704,22 @@ int StereoLite::copyPlanesweepFinalToHost(cv::Mat &wCropped) {
 	checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_depth, dataSize32f, cudaMemcpyDeviceToHost));
 	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
 	wCropped = depth(roi);
+	return 0;
+}
+
+int StereoLite::copyPlanesweepFinalToHost(cv::Mat &croppedDepth, cv::Mat &croppedX, float focalx, float focaly,
+	float cx, float cy, float d1, float d2, float d3, float d4,
+	float t1, float t2, float t3) {
+	// Convert Disparity to Depth/3D
+	ConvertKB(ps_finalWarpForward, focalx, focaly, cx, cy, d1, d2, d3, d4, t1, t2, t3, d_X, d_depth, width, height, stride);
+
+	// Remove Padding
+	checkCudaErrors(cudaMemcpy((float *)depth.ptr(), d_depth, dataSize32f, cudaMemcpyDeviceToHost));
+	cv::Rect roi(0, 0, width, height); // define roi here as x0, y0, width, height
+	croppedDepth = depth(roi);
+
+	checkCudaErrors(cudaMemcpy((float3 *)X.ptr(), d_X, dataSize32fc3, cudaMemcpyDeviceToHost));
+	croppedX = X(roi);
 	return 0;
 }
 
@@ -844,7 +962,8 @@ int StereoLite::planeSweepL2upsamplingL1Refinement() {
 }
 
 int StereoLite::planeSweepPyramidL1Refinement() {
-	planeSweepSubpixel();
+	//planeSweepSubpixel();
+	planeSweepExponentialDistance();
 	Clone(ps_disparityFinal, pSparsePrior[0], pW[0], pH[0], pS[0]);
 	
 	checkCudaErrors(cudaMemset(d_u, 0, dataSize32f));

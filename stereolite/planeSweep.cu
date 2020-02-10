@@ -166,7 +166,8 @@ void LitePlaneSweepCorrelationGetWarpKernel(float* imError, float* disparity, fl
 }
 
 
-void StereoLite::PlaneSweepCorrelationGetWarp(float *i0, float *i1, float* disparity, float sweepDistance, float sweepStride, int windowSize,
+void StereoLite::PlaneSweepCorrelationGetWarp(float *i0, float *i1, float* disparity, 
+	float sweepDistance, float sweepStride, int windowSize,
 	float2* currentWarp, float2* finalWarp, float2 * translationVector, int w, int h, int s, float *error)
 {
 	dim3 threads(BlockWidth, BlockHeight);
@@ -176,8 +177,10 @@ void StereoLite::PlaneSweepCorrelationGetWarp(float *i0, float *i1, float* dispa
 		currentWarp, finalWarp, translationVector, w, h, s, error);*/
 	LitePlaneSweepGetErrorKernel << < blocks, threads >> > (i0, i1, w, h, s, ps_errorHolder);
 
-	LitePlaneSweepCorrelationGetWarpKernel << <blocks, threads >> > (ps_errorHolder, disparity, sweepDistance, sweepStride,
-		planeSweepMaxDisparity, windowSize, currentWarp, finalWarp, translationVector, w, h, s, error, ps_meanError);
+	LitePlaneSweepCorrelationGetWarpKernel << <blocks, threads >> > (ps_errorHolder, disparity, 
+		sweepDistance, sweepStride,
+		planeSweepMaxDisparity, windowSize, currentWarp, finalWarp, 
+		translationVector, w, h, s, error, ps_meanError);
 
 	/*LitePlaneSweepMeanCleanup << < blocks, threads >> > (error, ps_meanError, planeSweepStandardDev, disparity, finalWarp, 
 		w, h, s);*/

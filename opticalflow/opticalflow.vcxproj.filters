@@ -15,25 +15,19 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Tslam.h">
+    <ClInclude Include="lib_link.h">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="lib_link.h">
+    <ClInclude Include="flow.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Tslam.cpp">
+    <CudaCompile Include="flow.cu">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="StereoTgv.cpp">
+    </CudaCompile>
+    <CudaCompile Include="tvl1.cu">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="StereoLite.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="OpticalFlow.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
+    </CudaCompile>
   </ItemGroup>
 </Project>

@@ -2,13 +2,18 @@
 
 int Tslam::initialize(const char* serialNumber) {
 	viewer = new Viewer();
+	pointcloudViewer = new Viewer();
 
-	// Fisheye Stereo
+	// Fisheye Stereo - Change to switch between TVL1 and TGVL1
+	// Also change the one inside fetch frames
 	//initStereoTVL1();
 	initStereoTGVL1();
 
+	// Dense Optical Flow
+	initOpticalFlow();
+
 	// Upsampling
-	initDepthUpsampling();
+	//initDepthUpsampling();
 
 	try {
 		ctx = new rs2::context();
@@ -61,6 +66,14 @@ int Tslam::initialize(const char* serialNumber) {
 	t265.fisheye2 = cv::Mat(t265.height, t265.width, CV_8UC1);
 	t265.fisheye132f = cv::Mat(t265.height, t265.width, CV_32F);
 	t265.fisheye232f = cv::Mat(t265.height, t265.width, CV_32F);
+
+	// Point Cloud
+	pcVertexArray = std::vector<float>(stereoHeight * stereoWidth * 8, 0.0f);
+	pcIndexArray = std::vector<unsigned int>(stereoHeight * stereoWidth * 3, 0);
+	int cnt = 0;
+	for (std::vector<unsigned int>::iterator it = pcIndexArray.begin(); it != pcIndexArray.end(); it++) {
+		(*it) = cnt++;
+	}
 }
 
 int Tslam::initDepthUpsampling() {
@@ -88,11 +101,13 @@ int Tslam::run() {
 	//std::thread t2(&Rslam::poseSolverDefaultStereoMulti, this);
 	std::thread t2(&Tslam::cameraPoseSolver, this);
 	std::thread t3(&Tslam::visualizePose, this);
+	std::thread t4(&Tslam::visualizePointcloud, this);
 
 	t0.join();
 	t1.join();
 	t2.join();
 	t3.join();
+	t4.join();
 
 	t265.pipe->stop();
 	return 0;
@@ -165,12 +180,18 @@ int Tslam::cameraPoseSolver() {
 	//cv::imshow("fisheye mask", t265.fisheyeMask);
 	t265.d_fisheyeMask.upload(t265.fisheyeMask);
 
+	FileReader *floorFile = new FileReader();
+	floorFile->readObj("floor.obj", FileReader::ArrayFormat::VERTEX_NORMAL_TEXTURE, 0.03f);
+
+	cv::Mat previousFrame;
+	bool isFirstFlowFrame = true;
 	while (true) {
 		char pressed = cv::waitKey(10);
 		if (pressed == 27) break;
 		if (pressed == 'r') {
 			t265.keyframeExist = false; // change this to automatic keyframing
 		}
+		previousFrame = t265.fisheye1.clone();
 
 		//if (!(processDepth(device0) && processIr(device0))) continue;
 		//upsampleDepth(device0);
@@ -187,9 +208,22 @@ int Tslam::cameraPoseSolver() {
 		cv::imwrite("fs2.png", equi2);*/
 		//visualizeKeypoints(t265, "kp");
 
-		//solveStereoTVL1();
+		// Solve Stereo
 		solveStereoTGVL1();
-		createDepthThresholdMask(t265, 1.0f);
+		//solveStereoTVL1();
+		if (pointcloudViewer->isRunning) {
+			// Separate pcX channels and convert to vertex array 3-3-2 format
+			//std::cout << pcX.at<cv::Vec3f>(200, 212)[0] << std::endl;
+			pointcloudToArray(pcXMasked, pcVertexArray, pcIndexArray);
+			pointcloudViewer->cgObject->at(1)->updateData(pcVertexArray, pcIndexArray);
+		}
+		//createDepthThresholdMask(t265, 1.0f);
+
+		// Solve Optical Flow
+		if (!isFirstFlowFrame) {
+			solveOpticalFlow(t265.fisheye1, previousFrame);
+		}
+		isFirstFlowFrame = false;
 
 		//cv::Mat depthUpsample = cv::Mat(stereoHeight, upsampling->iAlignUp(stereoWidth), CV_32F);
 		//cv::Mat depthPad, imagePad;
@@ -491,6 +525,39 @@ int Tslam::solveImuPose(T265 &device) {
 	return 0;
 }
 
+int Tslam::visualizePointcloud() {
+	pointcloudViewer->createWindow(800, 600, "pointcloud");
+	pointcloudViewer->setCameraProjectionType(Viewer::ProjectionType::PERSPECTIVE);
+	float scale = 0.03f;
+
+	FileReader *floorFile = new FileReader();
+	floorFile->readObj("monkey.obj", FileReader::ArrayFormat::VERTEX_NORMAL_TEXTURE, scale);
+	CgObject *floor = new CgObject();
+	floor->objectIndex = 0;
+	floor->loadShader("myshader2.vert", "myshader2.frag");
+	floor->loadData(floorFile->vertexArray, floorFile->indexArray, CgObject::ArrayFormat::VERTEX_NORMAL_TEXTURE);
+	floor->loadTexture("floor.jpg");
+	floor->setDrawMode(CgObject::Mode::TRIANGLES);
+	floor->setLight();
+	floor->objectIndex = (int)pointcloudViewer->cgObject->size();
+	pointcloudViewer->cgObject->push_back(floor);
+	pointcloudViewer->cgObject->at(floor->objectIndex)->ty = -2.0f;
+
+	CgObject *pointcloud = new CgObject();
+	pointcloud->objectIndex = 1;
+	pointcloud->loadShader("myshader2.vert", "myshader2.frag");
+	pointcloud->loadData(pcVertexArray, pcIndexArray, CgObject::ArrayFormat::VERTEX_NORMAL_TEXTURE);
+	pointcloud->loadTexture("floor.jpg");
+	pointcloud->setDrawMode(CgObject::Mode::POINTS);
+	pointcloud->setLight();
+	pointcloud->objectIndex = (int)pointcloudViewer->cgObject->size();
+	pointcloudViewer->cgObject->push_back(pointcloud);
+
+	pointcloudViewer->run();
+	pointcloudViewer->close();
+	return 0;
+}
+
 int Tslam::visualizePose() {
 	viewer->createWindow(800, 600, "campose");
 	viewer->setCameraProjectionType(Viewer::ProjectionType::PERSPECTIVE);
@@ -738,6 +805,30 @@ std::string Tslam::parseDecimal(double f, int precision) {
 		string << std::fixed << "+" << f;
 	}
 	return string.str();
+}
+
+void Tslam::pointcloudToArray(cv::Mat pc, std::vector<float> &vertexArray, std::vector<unsigned int> &indexArray) {
+	//std::cout << pc.at<cv::Vec3f>(200, 212)[0] << " " << pc.at<cv::Vec3f>(200, 212)[1] << " " << pc.at<cv::Vec3f>(200, 212)[2] << std::endl;
+	std::vector<float>::iterator it = vertexArray.begin();
+	for (int h = 0; h < stereoHeight; h++) {
+		for (int w = 0; w < stereoWidth; w++) {
+			if (isinf(pc.at<cv::Vec3f>(h, w)[0]) || isinf(pc.at<cv::Vec3f>(h, w)[0]) || isinf(pc.at<cv::Vec3f>(h, w)[0])) {
+				(*it++) = 0.0f;
+				(*it++) = 0.0f;
+				(*it++) = 0.0f;
+			}
+			else {
+				(*it++) = -pc.at<cv::Vec3f>(h, w)[0];
+				(*it++) = -pc.at<cv::Vec3f>(h, w)[1];
+				(*it++) = pc.at<cv::Vec3f>(h, w)[2];
+			}
+			(*it++) = 1.0f;
+			(*it++) = 1.0f;
+			(*it++) = 1.0f;
+			(*it++) = 0.1f;
+			(*it++) = 0.1f;
+		}
+	}
 }
 
 

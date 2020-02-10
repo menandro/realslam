@@ -15,12 +15,20 @@ int main(int argc, char *argv[]) {
 	//test_VehicleSegmentation();
 	//test_PlaneSweepWithTvl1();
 
+	//std::string mainfolder = std::string(argv[1]);
+	//int startFrame = atoi(argv[2]);
+	//int endFrame = atoi(argv[3]);
+	//std::cout << mainfolder << " " << startFrame << " " << endFrame << std::endl;
+	////test_ImageSequencePlanesweep(mainfolder, startFrame, endFrame);
+	//test_ImageSequence(mainfolder, startFrame, endFrame);
+
+	std::cout << "Usage: ./exe c:/mainfolder startframe endframe imagescale" << std::endl;
 	std::string mainfolder = std::string(argv[1]);
 	int startFrame = atoi(argv[2]);
 	int endFrame = atoi(argv[3]);
+	float scaling = atof(argv[4]);
 	std::cout << mainfolder << " " << startFrame << " " << endFrame << std::endl;
-	test_ImageSequencePlanesweep(mainfolder, startFrame, endFrame);
-	//test_ImageSequence(mainfolder, startFrame, endFrame);
+	test_ImageSequenceFlow(mainfolder, startFrame, endFrame, scaling);
 
 	//test_PlaneSweep();
 	//test_ImageSequenceLite();

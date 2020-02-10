@@ -20,9 +20,9 @@
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{33B1552F-AF3B-4F41-981E-A58E75E4AA18}</ProjectGuid>
+    <ProjectGuid>{27ADA003-C94E-4F85-9163-1C875C9F0F3C}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>tslam</RootNamespace>
+    <RootNamespace>opticalflow</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.18362.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -54,6 +54,7 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 10.1.props" />
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
@@ -72,9 +73,8 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>C:\ProgramData\NVIDIA Corporation\CUDA Samples\v10.1\common\inc;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\include;D:\dev\c-projects\realslam;D:\dev\include;C:\Program Files %28x86%29\Intel RealSense SDK 2.0\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
-    <LibraryPath>D:\dev\lib64;C:\Program Files %28x86%29\Intel RealSense SDK 2.0\lib\x64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
-    <ExecutablePath>C:\Program Files %28x86%29\Intel RealSense SDK 2.0\bin\x64;$(VC_ExecutablePath_x64);$(WindowsSDK_ExecutablePath);$(VS_ExecutablePath);$(MSBuild_ExecutablePath);$(FxCopDir);$(PATH);</ExecutablePath>
+    <IncludePath>C:\ProgramData\NVIDIA Corporation\CUDA Samples\v10.1\common\inc;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\include;D:\dev\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <LibraryPath>D:\dev\lib64;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
@@ -154,27 +154,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="flow.h" />
     <ClInclude Include="lib_link.h" />
-    <ClInclude Include="Tslam.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="OpticalFlow.cpp" />
-    <ClCompile Include="StereoLite.cpp" />
-    <ClCompile Include="StereoTgv.cpp" />
-    <ClCompile Include="Tslam.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\opticalflow\opticalflow.vcxproj">
-      <Project>{27ada003-c94e-4f85-9163-1c875c9f0f3c}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\stereolite\stereolite.vcxproj">
-      <Project>{a58fa226-8d96-450f-9cd5-7d82408168e6}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\stereotgv\stereotgv.vcxproj">
-      <Project>{bc130900-e36b-4f95-8089-eacbcd4a56a3}</Project>
-    </ProjectReference>
+    <CudaCompile Include="flow.cu" />
+    <CudaCompile Include="tvl1.cu" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 10.1.targets" />
   </ImportGroup>
 </Project>

@@ -3,17 +3,29 @@
 int Tslam::initStereoTGVL1() {
 	stereotgv = new StereoTgv();
 	stereoScaling = 2.0f;
-	float lambda = 10.0f;
+	// slow but okay settings
+	/*float lambda = 3.0f;
+	float nLevel = 10;
+	float fScale = 1.2f;
+	int nWarpIters = 50;
+	int nSolverIters = 50;
+	stereotgv->limitRange = 0.2f;*/
+	// 20fps settings
+	float lambda = 5.0f;
 	float nLevel = 5;
 	float fScale = 2.0f;
 	int nWarpIters = 5;
 	int nSolverIters = 20;
-	stereotgv->limitRange = 1.0f;
+	stereotgv->limitRange = 0.5f;
 
 	stereoWidth = (int)(t265.width / stereoScaling);
 	stereoHeight = (int)(t265.height / stereoScaling);
 	stereotgv->baseline = 0.0642f;
 	stereotgv->focal = 285.8557f / stereoScaling;
+
+	pcX = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+	pcXMasked = cv::Mat::zeros(stereoHeight, stereoWidth, CV_32FC3);
+
 	cv::Mat translationVector, calibrationVector;
 	if (stereoScaling == 2.0f) {
 		translationVector = cv::readOpticalFlow("translationVectorHalf.flo");
@@ -63,11 +75,20 @@ int Tslam::solveStereoTGVL1() {
 		stereotgv->copyImagesToDevice(halfFisheye1, halfFisheye2);
 		stereotgv->solveStereoForwardMasked();
 		cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+		
 		cv::Mat depthVis;
 		stereotgv->copyStereoToHost(depth);
+		stereotgv->copyStereoToHost(depth, pcX, 285.722f / stereoScaling, 286.759f / stereoScaling,
+			420.135f / stereoScaling, 403.394 / stereoScaling,
+			-0.00659769f, 0.0473251f, -0.0458264f, 0.00897725f,
+			-0.0641854f, -0.000218299f, 0.000111253f);
+
+		
 		clock_t timeElapsed = (clock() - start);
 		//std::cout << "time: " << timeElapsed << " ms" << std::endl;
 
+		pcX.copyTo(pcXMasked, fisheyeMask8);
+		//cv::imshow("X", pcXMasked);
 		depth.copyTo(depthVis, fisheyeMask8);
 		cv::resize(depthVis, t265.depth32f, cv::Size(t265.width, t265.height));
 		showDepthJet("color", depthVis, std::to_string(timeElapsed), 5.0f, false);

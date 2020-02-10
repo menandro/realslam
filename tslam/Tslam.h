@@ -19,6 +19,7 @@ Device: T265
 #include <stereo/stereo.h>
 #include <stereotgv/stereotgv.h>
 #include <stereolite/stereolite.h>
+#include <opticalflow/flow.h>
 
 class Tslam {
 public:
@@ -165,14 +166,17 @@ public:
 		bool keyframeExist;
 	};
 
-	
-
 	// Device
 	rs2::context * ctx;
 	T265 t265;
 
 	// Viewer
 	Viewer* viewer;
+	Viewer* pointcloudViewer;
+	cv::Mat pcX, pcXMasked; // 3D points
+	std::vector<float> pcVertexArray; //3-vertex, 3-normal, 2-texture uv
+	std::vector<unsigned int> pcIndexArray; // 3-index (triangle);
+	void pointcloudToArray(cv::Mat pc, std::vector<float> &vertexArray, std::vector<unsigned int> &indexArray);
 
 	// Stereo
 	Stereo* stereo;
@@ -185,6 +189,22 @@ public:
 	cv::Mat fisheyeMask8;
 	cv::Mat fisheyeMaskHalf;
 	cv::Mat fisheyeMask8Half;
+	int initStereoTVL1();
+	int initStereoTGVL1();
+	int solveStereoTGVL1();
+	int solveStereoTVL1();
+	int initDepthUpsampling();
+	cv::Mat depthVisMask;
+	bool isDepthVisMaskCreated = false;
+
+	// Optical Flow
+	Flow* flow;
+	int flowWidth;
+	int flowHeight;
+	float flowScaling;
+	int initOpticalFlow();
+	int solveOpticalFlow(cv::Mat im1, cv::Mat im2);
+	cv::Mat flowTemp, flowTempRgb;
 
 	// Upsampling
 	lup::Upsampling * upsampling;
@@ -202,6 +222,7 @@ public:
 	int imuPoseSolver();
 	int cameraPoseSolver();
 	int visualizePose();
+	int visualizePointcloud();
 
 	int detectAndComputeOrb(cv::Mat im, cv::cuda::GpuMat &d_im,
 		std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
@@ -216,14 +237,6 @@ public:
 	bool processGyro(T265 &device);
 	bool processAccel(T265 &device);
 
-	// Stereo
-	int initStereoTVL1();
-	int initStereoTGVL1();
-	int solveStereoTGVL1();
-	int solveStereoTVL1();
-	int initDepthUpsampling();
-	cv::Mat depthVisMask;
-	bool isDepthVisMaskCreated = false;
 
 
 	// Utilities

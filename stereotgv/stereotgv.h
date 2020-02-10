@@ -98,6 +98,7 @@ public:
 
 	// 3D
 	float3 *d_X;
+	cv::Mat X;
 
 	// Debug
 	float *debug_depth;
@@ -113,6 +114,9 @@ public:
 	int solveStereoForwardMasked();
 	int solveStereoTrajectoryPerIteration(float fov, float cx, float cy, float tx, float ty, float tz);
 	int copyStereoToHost(cv::Mat &wCropped);
+	int copyStereoToHost(cv::Mat &croppedDepth, cv::Mat &croppedX, float focalx, float focaly,
+		float cx, float cy, float d1, float d2, float d3, float d4,
+		float t1, float t2, float t3);
 	int copy1DDisparityToHost(cv::Mat &wCropped);
 	int copyDisparityToHost(cv::Mat &wCropped);
 	int copyDisparityVisToHost(cv::Mat &wCropped, float flowScale);
@@ -181,6 +185,9 @@ public:
 	void Upscale(const float2 *src, int width, int height, int stride,
 		int newWidth, int newHeight, int newStride, float scale, float2 *out);
 	void ConvertDisparityToDepth(float *disparity, float baseline, float focal, int w, int h, int s, float *depth);
+	void ConvertKB(float2 *disparity, float focalx, float focaly, float cx, float cy,
+		float d1, float d2, float d3, float d4, float t1, float t2, float t3,
+		float3 *X, float* depth, int w, int h, int s);
 
 	void UpdateDualVariablesTGV(float* u_, float2 *v_, float alpha0, float alpha1, float sigma,
 		float eta_p, float eta_q, float* a, float* b, float* c,

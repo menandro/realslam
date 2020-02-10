@@ -51,8 +51,10 @@
     <CudaCompile Include="primalDualTvl1.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
-    <CudaCompile Include="conversion.cu" />
     <CudaCompile Include="planeSweep.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
+    <CudaCompile Include="conversion.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
   </ItemGroup>
