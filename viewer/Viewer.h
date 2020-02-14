@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <GLFW/glfw3.h>
 #include "lib_link.h"
-#include <opencv2/opencv.hpp>
+//#include <opencv2/opencv.hpp>
 
 #include <glm/gtc/matrix_transform.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
