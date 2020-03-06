@@ -20,7 +20,7 @@ int Tslam::initialize(const char* serialNumber) {
 		auto dev = ctx->query_devices();
 
 		for (auto&& devfound : dev) {
-			const char * serialNo = devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
+			const char* serialNo = devfound.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
 			std::cout << "Found device: " << serialNo << std::endl;
 			std::vector<rs2::sensor> sensors = devfound.query_sensors();
 			sensors[0].set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0);
@@ -37,10 +37,10 @@ int Tslam::initialize(const char* serialNumber) {
 				t265.cfg.enable_stream(RS2_STREAM_FISHEYE, 2, 848, 800, rs2_format::RS2_FORMAT_Y8, 30);
 				t265.cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 62);
 				t265.cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200);
-				
+
 				auto prof = t265.pipe->start(t265.cfg);
 				// Disable auto-exposure
-				
+
 
 				t265.isFound = true;
 				std::cout << "Pipe created from: " << serialNo << std::endl;
@@ -52,7 +52,7 @@ int Tslam::initialize(const char* serialNumber) {
 		std::cerr << "RealSense error calling " << e.get_failed_function() << "(" << e.get_failed_args() << "):\n    " << e.what() << std::endl;
 		return EXIT_FAILURE;
 	}
-	catch (const std::exception& e)
+	catch (const std::exception & e)
 	{
 		std::cerr << e.what() << std::endl;
 		return EXIT_FAILURE;
@@ -69,11 +69,41 @@ int Tslam::initialize(const char* serialNumber) {
 
 	// Point Cloud
 	pcVertexArray = std::vector<float>(stereoHeight * stereoWidth * 8, 0.0f);
-	pcIndexArray = std::vector<unsigned int>(stereoHeight * stereoWidth * 3, 0);
+	pcIndexArray = std::vector<unsigned int>(stereoHeight * stereoWidth * 3);
+	//pcIndexArray = std::vector<unsigned int>();// (stereoHeight - 1)* (stereoWidth - 1) * 2 * 3);
+
+	//for (int j = 0; j < (stereoHeight-1); j++) {
+	//	// Top triangles
+	//	for (int i = 0; i < (stereoWidth-1); i++) {
+	//		unsigned int ii = (unsigned int)i;
+	//		unsigned int jj = (unsigned int)j;
+	//		pcIndexArray.push_back(ii);
+	//		pcIndexArray.push_back(ii + 1);
+	//		pcIndexArray.push_back((jj + 1) * stereoWidth + ii);
+	//	}
+	//	// Bottom triangles
+	//	for (int i = 0; i < (stereoWidth - 1); i++) {
+	//		unsigned int ii = (unsigned int)i;
+	//		unsigned int jj = (unsigned int)j;
+	//		pcIndexArray.push_back((jj + 1) * stereoWidth + ii);
+	//		pcIndexArray.push_back(ii + 1);
+	//		pcIndexArray.push_back((jj + 1) * stereoWidth + ii + 1);
+	//	}
+	//}
+	//std::cout << "index size" << pcIndexArray.size() << std::endl;
+
 	int cnt = 0;
 	for (std::vector<unsigned int>::iterator it = pcIndexArray.begin(); it != pcIndexArray.end(); it++) {
 		(*it) = cnt++;
 	}
+	//for (int i=0; i < pcIndexArray.size(); i++){
+	//	//(*it) = cnt++;
+	//	std::cout << pcIndexArray[i] << ",";
+	//	cnt++;
+	//	if ((cnt % 30) == 0) {
+	//		std::cout << std::endl;
+	//	}
+	//}
 }
 
 int Tslam::initDepthUpsampling() {
@@ -822,9 +852,9 @@ void Tslam::pointcloudToArray(cv::Mat pc, std::vector<float> &vertexArray, std::
 	for (int h = 0; h < stereoHeight; h++) {
 		for (int w = 0; w < stereoWidth; w++) {
 			if (isinf(pc.at<cv::Vec3f>(h, w)[0]) || isinf(pc.at<cv::Vec3f>(h, w)[0]) || isinf(pc.at<cv::Vec3f>(h, w)[0])) {
-				(*it++) = 0.0f;
-				(*it++) = 0.0f;
-				(*it++) = 0.0f;
+				(*it++) = 10.0f;
+				(*it++) = 10.0f;
+				(*it++) = 10.0f;
 			}
 			else {
 				(*it++) = -pc.at<cv::Vec3f>(h, w)[0];

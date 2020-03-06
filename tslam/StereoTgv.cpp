@@ -14,7 +14,7 @@ int Tslam::initStereoTGVL1() {
 	float lambda = 5.0f;
 	float nLevel = 5;
 	float fScale = 2.0f;
-	int nWarpIters = 10;
+	int nWarpIters = 5;
 	int nSolverIters = 20;
 	stereotgv->limitRange = 0.5f;
 
