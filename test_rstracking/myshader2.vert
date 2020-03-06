@@ -20,7 +20,7 @@ void main()
 	TexCoord = vec2(aTexCoord.x, aTexCoord.y);
 	FragPos = vec3(model * vec4(aPos, 1.0f));
 
-	gl_PointSize = 1.0f;
+	gl_PointSize = 3.0f;
 	Normal = normalize(normalMatrix * aNormal);
 	Normal.x = Normal.x/2.0f + 0.5f;
 	Normal.y = Normal.y/2.0f + 0.5f;

@@ -89,6 +89,27 @@ void CgObject::loadTexture(std::string filename) {
 	this->loadTexture(texture);
 }
 
+void CgObject::updateTexture(cv::Mat texture) {
+	needsTextureUpdate = true;
+	textureToUpdate = texture;
+}
+
+void CgObject::loadUpdatedTexture() {
+	glBindTexture(GL_TEXTURE_2D, tex1);
+	glTexSubImage2D(
+		GL_TEXTURE_2D,
+		0,
+		0,
+		0,
+		textureToUpdate.cols,
+		textureToUpdate.rows,
+		GL_BGR,
+		GL_UNSIGNED_BYTE,
+		textureToUpdate.ptr()
+	);
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 void CgObject::loadTexture(cv::Mat texture) {
 	if (texture.empty()) {
 		texture = cv::imread("default_texture.jpg");
@@ -104,7 +125,7 @@ void CgObject::loadTexture(cv::Mat texture) {
 	// set texture filtering parameters
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
+	
 	glTexImage2D(GL_TEXTURE_2D,     // Type of texture
 		0,                 // Pyramid level (for mip-mapping) - 0 is the top level
 		GL_RGB,            // Internal colour format to convert to

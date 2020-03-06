@@ -137,6 +137,12 @@ int Tslam::fetchFrames() {
 
 		t265.fisheye1 = cv::Mat(cv::Size(t265.width, t265.height), CV_8UC1, (void*)fisheye1Data.get_data(), cv::Mat::AUTO_STEP);
 		t265.fisheye2 = cv::Mat(cv::Size(t265.width, t265.height), CV_8UC1, (void*)fisheye2Data.get_data(), cv::Mat::AUTO_STEP);
+		
+		cv::Mat equi1, rgb;
+		cv::equalizeHist(t265.fisheye1, equi1);
+		cv::cvtColor(equi1, t265.fisheye1texture, cv::COLOR_GRAY2RGB);
+
+		//cv::flip(rgb, t265.fisheye1texture, 0);
 		/*cv::imshow("fisheye1", t265.fisheye1);
 		cv::imshow("fisheye2", t265.fisheye2);*/
 
@@ -215,7 +221,9 @@ int Tslam::cameraPoseSolver() {
 			// Separate pcX channels and convert to vertex array 3-3-2 format
 			//std::cout << pcX.at<cv::Vec3f>(200, 212)[0] << std::endl;
 			pointcloudToArray(pcXMasked, pcVertexArray, pcIndexArray);
+			pointcloudViewer->cgObject->at(1)->updateTexture(t265.fisheye1texture);
 			pointcloudViewer->cgObject->at(1)->updateData(pcVertexArray, pcIndexArray);
+			
 		}
 		//createDepthThresholdMask(t265, 1.0f);
 
@@ -547,7 +555,8 @@ int Tslam::visualizePointcloud() {
 	pointcloud->objectIndex = 1;
 	pointcloud->loadShader("myshader2.vert", "myshader2.frag");
 	pointcloud->loadData(pcVertexArray, pcIndexArray, CgObject::ArrayFormat::VERTEX_NORMAL_TEXTURE);
-	pointcloud->loadTexture("floor.jpg");
+	//pointcloud->loadTexture("floor.jpg");
+	pointcloud->loadTexture(t265.fisheye1texture);
 	pointcloud->setDrawMode(CgObject::Mode::POINTS);
 	pointcloud->setLight();
 	pointcloud->objectIndex = (int)pointcloudViewer->cgObject->size();
@@ -825,8 +834,8 @@ void Tslam::pointcloudToArray(cv::Mat pc, std::vector<float> &vertexArray, std::
 			(*it++) = 1.0f;
 			(*it++) = 1.0f;
 			(*it++) = 1.0f;
-			(*it++) = 0.1f;
-			(*it++) = 0.1f;
+			(*it++) = (float)w / (float)stereoWidth; 
+			(*it++) = (float)h / (float)stereoHeight;
 		}
 	}
 }

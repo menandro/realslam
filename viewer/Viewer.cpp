@@ -242,6 +242,10 @@ void Viewer::run() {
 				(*it)->loadUpdatedData();
 				(*it)->needsUpdate = false;
 			}
+			if ((*it)->needsTextureUpdate) {
+				(*it)->loadUpdatedTexture();
+				(*it)->needsTextureUpdate = false;
+			}
 			(*it)->bindTexture();
 			(*it)->bindShader();
 

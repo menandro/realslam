@@ -115,7 +115,11 @@ public:
 	int nVertices;
 	int nIndices;
 	GLsizei nTriangles; //nTriangles = nIndices??
-	bool needsUpdate = false;
+
+	bool needsUpdate = false; // for vertex
+	bool needsTextureUpdate = false;
+	cv::Mat textureToUpdate;
+
 	std::vector<float> updatedVertexArray;
 	std::vector<unsigned int> updatedIndexArray;
 
@@ -165,6 +169,9 @@ public:
 	void updateData(std::vector<float> vertices, std::vector<unsigned int> indices);
 	// Update vertices, call in the draw thread
 	void loadUpdatedData();
+	// Update texture
+	void updateTexture(cv::Mat texture);
+	void loadUpdatedTexture();
 
 	void bindTexture();
 	void setMVP(glm::mat4 model, glm::mat4 view, glm::mat4 projection);

@@ -125,6 +125,8 @@ public:
 		cv::Mat fisheye132f;
 		cv::Mat fisheye232f;
 		cv::Mat fisheyeMask;
+		cv::Mat fisheye1texture;
+		cv::Mat fisheye28uc3;
 		cv::Mat depth32f = cv::Mat(height, width, CV_32F);
 		cv::Mat depthHalf32f = cv::Mat(height / 2, width / 2, CV_32F);
 		cv::Mat mask;
