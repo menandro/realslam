@@ -2,6 +2,11 @@
 
 Viewer::Viewer()
 {
+	glfwInit();
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
 	camera = new Camera(glm::vec3(0.0f, 0.0f, -5.0f), glm::vec3(0.0f, 1.0f, 0.0f), 90.0f, 0.0f);
 	projectionType = ProjectionType::DEFAULT_PROJECTION;
 	camera->orthoZoom = 1.0f;
@@ -37,11 +42,6 @@ void Viewer::makeCurrent() {
 
 int Viewer::createWindow(int scrWidth, int scrHeight, const char *windowName)
 {
-	glfwInit();
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
 	// glfw window creation
 	// --------------------
 	this->scrWidth = scrWidth;
@@ -50,6 +50,7 @@ int Viewer::createWindow(int scrWidth, int scrHeight, const char *windowName)
 	this->lastY = scrHeight / 2.0f;
 	this->firstMouse = true;
 
+	//window = new GLFWwindow*();
 	std::cout << "Creating GLFW window: " << windowName << std::endl;
 	window = glfwCreateWindow(scrWidth, scrHeight, windowName, NULL, NULL);
 	if (window == NULL)
@@ -211,7 +212,6 @@ void Viewer::depthEdgeAndVertexCapture() {
 
 void Viewer::run() {
 	makeCurrent();
-	isRunning = true;
 	while (!glfwWindowShouldClose(window))
 	{
 		float currentFrame = glfwGetTime();
@@ -238,6 +238,14 @@ void Viewer::run() {
 
 		// render all cgobjects
 		for (std::vector<CgObject*>::iterator it = cgObject->begin(); it != cgObject->end(); ++it) {
+			if ((*it)->needsUpdate) {
+				(*it)->loadUpdatedData();
+				(*it)->needsUpdate = false;
+			}
+			if ((*it)->needsTextureUpdate) {
+				(*it)->loadUpdatedTexture();
+				(*it)->needsTextureUpdate = false;
+			}
 			(*it)->bindTexture();
 			(*it)->bindShader();
 
@@ -257,6 +265,8 @@ void Viewer::run() {
 		// -------------------------------------------------------------------------------
 		glfwSwapBuffers(window);
 		glfwPollEvents();
+
+		isRunning = true;
 	}
 }
 
@@ -323,12 +333,12 @@ void Viewer::saveFramebuffer(std::string filename) {
 }
 
 void Viewer::close() {
-	glfwTerminate();
+	//glfwTerminate();
 	isRunning = false;
 }
 
 //callbacks
-void Viewer::processInput(GLFWwindow *window)
+void Viewer::processInput(GLFWwindow* window)
 {
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
 		camera->ProcessKeyboard(FORWARD, deltaTime);

@@ -2,7 +2,7 @@
 
 texture<float, 2, cudaReadModeElementType> texForGradient;
 
-__global__ void PropagateColorOnlyKernel(float* grad, float* lidar, float* depthOut,
+__global__ void PropagateColorOnlyKernel(float* grad, float* lidar, float* depthOut, int radius,
 	int width, int height, int stride)
 {
 	int iy = blockIdx.y * blockDim.y + threadIdx.y;        // current row 
@@ -12,7 +12,7 @@ __global__ void PropagateColorOnlyKernel(float* grad, float* lidar, float* depth
 	{
 		int pos = ix + iy * stride;
 
-		int maxRad = 5;
+		int maxRad = radius;
 		int kernelSize = maxRad * 2 + 1;
 		int shift = maxRad;
 
@@ -107,11 +107,11 @@ __global__ void PropagateColorOnlyKernel(float* grad, float* lidar, float* depth
 }
 
 
-void lup::Upsampling::PropagateColorOnly(float* grad, float* lidar, float* depthOut)
+void lup::Upsampling::PropagateColorOnly(float* grad, float* lidar, float* depthOut, int radius)
 {
 	dim3 threads(BlockWidth, BlockHeight);
 	dim3 blocks(iDivUp(width, threads.x), iDivUp(height, threads.y));
-	PropagateColorOnlyKernel << < blocks, threads >> > (grad, lidar, depthOut, width, height, stride);
+	PropagateColorOnlyKernel << < blocks, threads >> > (grad, lidar, depthOut, radius, width, height, stride);
 }
 
 

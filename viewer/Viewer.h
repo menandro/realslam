@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <GLFW/glfw3.h>
 #include "lib_link.h"
-#include <opencv2/opencv.hpp>
+//#include <opencv2/opencv.hpp>
 
 #include <glm/gtc/matrix_transform.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
@@ -116,6 +116,13 @@ public:
 	int nIndices;
 	GLsizei nTriangles; //nTriangles = nIndices??
 
+	bool needsUpdate = false; // for vertex
+	bool needsTextureUpdate = false;
+	cv::Mat textureToUpdate;
+
+	std::vector<float> updatedVertexArray;
+	std::vector<unsigned int> updatedIndexArray;
+
 	// Current pose
 	float rx, ry, rz;
 	float tx, ty, tz;
@@ -158,6 +165,13 @@ public:
 	void loadTexture(std::string filename);
 	void loadData(std::vector<float> vertices, std::vector<unsigned int> indices);
 	void loadData(std::vector<float> vertices, std::vector<unsigned int> indices, ArrayFormat arrayFormat);
+	// Update vertices - call outside of the draw thread
+	void updateData(std::vector<float> vertices, std::vector<unsigned int> indices);
+	// Update vertices, call in the draw thread
+	void loadUpdatedData();
+	// Update texture
+	void updateTexture(cv::Mat texture);
+	void loadUpdatedTexture();
 
 	void bindTexture();
 	void setMVP(glm::mat4 model, glm::mat4 view, glm::mat4 projection);

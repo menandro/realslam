@@ -1,6 +1,6 @@
 #pragma once
 #include <librealsense2\rs.hpp>
-#include <camerapose\CameraPose.h>
+//#include <camerapose\CameraPose.h>
 #include <opencv2/opencv.hpp>
 #include "lib_link.h"
 #include <viewer\Viewer.h>
@@ -9,6 +9,8 @@
 #include <thread>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <opencv2/xfeatures2d/cuda.hpp>
+#include <opencv2/cudafeatures2d.hpp>
 
 class Rslam {
 public:
@@ -167,6 +169,7 @@ public:
 		cv::Mat infrared2;
 		cv::Mat infrared132f;
 		cv::Mat infrared232f;
+		float depthScale;
 
 		// For pose estimation
 		cv::cuda::GpuMat d_im;
@@ -184,6 +187,8 @@ public:
 		cv::Mat descriptorsIr1;
 		cv::Mat descriptorsIr2;
 		std::vector<std::vector<cv::DMatch>> matches;
+		cv::Mat mask;
+		cv::cuda::GpuMat d_mask;
 
 		double cx;
 		double cy;
@@ -209,11 +214,18 @@ public:
 		Gyro gyro;
 		Accel accel;
 		Pose pose;
+
+		rs2::frame_queue gyroQueue = rs2::frame_queue(1);
+		rs2::frame_queue accelQueue = rs2::frame_queue(1);
+		rs2::frame_queue depthQueue = rs2::frame_queue(1);
+		rs2::frame_queue infrared1Queue = rs2::frame_queue(1);
+		rs2::frame_queue infrared2Queue = rs2::frame_queue(1);
 	};
 
 	// MultiCamera fixed
 	Device device0;
 	Device device1;
+	Device externalImu;
 	std::string device0SN;
 	std::string device1SN;
 
@@ -251,23 +263,25 @@ public:
 
 	std::vector<Keyframe> keyframes;
 
-	int imuPoseSolver();
-	int poseSolverDefaultStereoMulti();
+	int initialize(Settings settings, FeatureDetectionMethod featMethod, std::string device0SN, std::string device1SN);
+	int initializeFromFile(const char* filename0, const char* filenameImu);
+	int run(); // thread runner
+	int runFromRecording();
+	int singleThread();
+	int fetchFrames(); // frameset fetcher thread
+	int imuPoseSolver(); // imu thread
+	int cameraPoseSolver(); // camera thread
+	int poseRefinement(); // keyframe pose refinement thread
+
 	int solveImuPose(Device& device);
 	bool settleImu(Device& device);
-	int solveCameraPose();
 	int matchAndPose(Device& device);
 	int solveRelativePose(Device& device, Keyframe *keyframe);
+	int createDepthThresholdMask(Device& device, float maxDepth);
 	int detectAndComputeOrb(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
+	int detectAndComputeOrb(Device& device);
 	int relativeMatchingDefaultStereo(Device &device, Keyframe *keyframe, cv::Mat currentFrame);
-	//int detectAndComputeOrb(Device &device);
 	
-	int createImuKeyframe(Device& device);
-	
-
-	// Functions
-	int initialize(Settings settings, FeatureDetectionMethod featMethod, std::string device0SN, std::string device1SN);
-
 private:
 	int initialize(int width, int height, int fps);
 	int initialize(Settings settings);
@@ -276,80 +290,45 @@ private:
 	bool isThisDevice(std::string serialNo, std::string queryNo);
 
 public:
-	int recordAll();
-	int playback(const char* serialNumber);
-	int run(); // poseSolver thread
-	int poseSolver(); // main loop for solving pose
-	int poseSolverDefaultStereo();
-	
-	int extractGyroAndAccel(Device &device);
-	int extractColor(Device &device);
-	int extractDepth(Device &device);
-	int extractIr(Device &device);
-	int extractTimeStamps();
-	int upsampleDepth(Device &device);
+	bool processGyro(Device &device);
+	bool processAccel(Device &device);
+	bool processDepth(Device &device);
+	bool processIr(Device &device);
 
-	// Utilities
+	int upsampleDepth(Device &device);
+	int extractColor(Device &device);
+	int adjustGamma(Device &device);
+	cv::Mat lookUpTable;
+
+	/// Utilities
 	void visualizeImu(Device &device);
 	void visualizePose();
 	void toEuler(Quaternion q, Vector3 &euler);
-
 	// Convert Euler(in IMU coordinates) to Quaternion (in MADGWICK/WIKIPEDIA coordinates)
 	void toQuaternion(Vector3 euler, Quaternion &q);
 	void updateViewerCameraPose(Device &device);
 	void updateViewerImuPose(Device &device);
-	void updateViewerPose(Device &device);
-	void updateViewerPose();
 	void visualizeColor(Device &device);
 	void visualizeDepth(Device &device);
 	void visualizeFps(double fps);
-
-	void visualizeKeypoints(cv::Mat im);
-	void visualizeKeypoints(cv::Mat ir1, cv::Mat ir2);
 	void visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir1, std::string windowNamePrefix);
-	void visualizeStereoKeypoints(cv::Mat ir1, cv::Mat ir2);
-	void visualizeRelativeKeypoints(Keyframe *keyframe, cv::Mat ir2);
 	
 	cv::Mat gyroDisp;
 	cv::Mat accelDisp;
 
-	//Tools
+	////Tools
 	std::string parseDecimal(double f);
 	std::string parseDecimal(double f, int precision);
 	void overlayMatrix(const char * windowName, cv::Mat &im, cv::Mat R1, cv::Mat t);
 	void overlayMatrixRot(const char* windowName, cv::Mat &im, Vector3 euler, Quaternion q);
 
-	// Unused
-	void updatePose();
-	int getPose(); // fetcher of current pose
-	int solveKeypointsAndDescriptors(cv::Mat im);
-	int solveStereoSurf(cv::Mat ir1, cv::Mat ir2);
-	int solveStereoOrb(cv::Mat ir1, cv::Mat ir2);
-	int solveRelativeSurf(Keyframe * keyframe);
-	int solveRelativeOrb(Keyframe * keyframe);
-	int detectAndComputeSurf(cv::Mat im, cv::cuda::GpuMat &d_im, std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
+	int saveImu(const char* filename0, const char* filenameImu, std::string outputFolder);
+	int saveExternalImu(const char* filename0, const char* filenameImu, std::string outputFolder);
+	int getSynchronization(const char* filename0, const char* filenameImu, std::string outputFolder);
+	int saveAllDepthAndInfrared(const char* filename0, const char* filenameImu, std::string outputFolder);
 
-	// Tests
-	int testOrb();
+	std::mutex mutex;
+
+	/// Tests
 	int testT265();
-	int runTestViewerSimpleThread();
-	int testViewerSimple();
-	int getFrames();
-	int testStream();
-	int testImu();
-	int getGyro(float *roll, float* pitch, float *yaw);
-
-	int showAlignedDepth();
-	int showDepth();
-	static int getPose(float *x, float *y, float *z, float *roll, float *pitch, float *yaw);
-
-
 };
-
-
-
-
-
-
-
-// Trash codes

@@ -17,10 +17,10 @@ public:
 	} arrayFormat;
 
 	//DATA FORMATS (vertex array)
-	std::vector<float> vntArray; //3-vertex 3-normal 2-texture
+	std::vector<float> vntArray; //3-vertex 3-normal 2-texture (maybe not used)
 	std::vector<float> vtArray; //3-vertex 2-texture
 
-	std::vector<float> vertexArray; //3-vertex 2-texture -> deprecate
+	std::vector<float> vertexArray; //3-vertex 3-normal 2-texture
 	std::vector<unsigned int> indexArray;
 	std::vector<float> normalArray; //container only if data is available
 	std::string objectName;//only if available

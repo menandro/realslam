@@ -11,8 +11,8 @@
 
 #include "lib_link.h"
 
-#define CUDA_LIB_PATH "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v10.0/lib/x64/"
-#pragma comment(lib, CUDA_LIB_PATH "cudart.lib")
+//#define CUDA_LIB_PATH "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v10.1/lib/x64/"
+//#pragma comment(lib, CUDA_LIB_PATH "cudart.lib")
 
 //#include "common.h"
 
@@ -111,8 +111,9 @@ namespace lup {
 		int copyImagesToHost(cv::Mat depth, cv::Mat propagated);
 		int copy3dToHost(cv::Mat X, cv::Mat Y, cv::Mat Z);
 
-		int propagateColorOnly();
+		int propagateColorOnly(int radius);
 		int solve();
+		int optimizeOnly();
 		int convertDepthTo3D(float focal, float cx, float cy); // convert depth to 3D points
 
 		// UTILITIES
@@ -147,7 +148,7 @@ namespace lup {
 			float tau, float* eta_u, float* eta_v1, float* eta_v2,
 			float alpha0, float alpha1, float* w, float* dw, float mu,
 			float* u, float2* v, float* u_s, float2* v_s);
-		void PropagateColorOnly(float* grad, float* lidar, float* depthOut);
+		void PropagateColorOnly(float* grad, float* lidar, float* depthOut, int radius);
 		void Gradient(float* input, float* output);
 		void PropagateNearestNeighbor(float* im, float* lidar, uchar3* semantic, float* motionStereo, float* depthOut);
 
@@ -162,6 +163,7 @@ namespace lup {
 		int showImage(std::string windowName, float* input, float minVal, float maxVal, bool shouldWait);
 		int showImage(std::string windowName, uchar3* input, bool shouldWait);
 		int showDepthJet(std::string windowName, float* input, bool shouldWait);
+		void showDepthJet(std::string windowName, float* input, float maxDepth, bool shouldWait);
 		int saveDepthJet(std::string filename, float* input, float maxDepth);
 	};
 }

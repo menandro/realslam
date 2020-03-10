@@ -16,6 +16,7 @@ CgObject::CgObject() {
 }
 
 void CgObject::bindBuffer() {
+	//std::cout << "VAO: " << this->vao << std::endl;
 	glBindVertexArray(this->vao);
 }
 
@@ -24,15 +25,16 @@ void CgObject::loadShader(const char *vertexShader, const char *fragmentShader) 
 }
 
 void CgObject::loadData(std::vector<float> vertices, std::vector<unsigned int> indices) {
-	arrayFormat = ArrayFormat::VERTEX_NORMAL_TEXTURE;
-	loadData(vertices, indices, arrayFormat);
+	this->arrayFormat = ArrayFormat::VERTEX_NORMAL_TEXTURE;
+	loadData(vertices, indices, this->arrayFormat);
 }
 
 void CgObject::loadData(std::vector<float> vertices, std::vector<unsigned int> indices, ArrayFormat arrayFormat) {
 	nTriangles = indices.size();
+	this->arrayFormat = arrayFormat;
 	this->bindBuffer();
 
-	if (arrayFormat == ArrayFormat::VERTEX_NORMAL_TEXTURE) {
+	if (this->arrayFormat == ArrayFormat::VERTEX_NORMAL_TEXTURE) {
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
 
@@ -52,7 +54,7 @@ void CgObject::loadData(std::vector<float> vertices, std::vector<unsigned int> i
 		glEnableVertexAttribArray(2);
 	}
 
-	else if (arrayFormat == ArrayFormat::VERTEX_TEXTURE) {
+	else if (this->arrayFormat == ArrayFormat::VERTEX_TEXTURE) {
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
 
@@ -72,9 +74,40 @@ void CgObject::loadData(std::vector<float> vertices, std::vector<unsigned int> i
 	}
 }
 
+void CgObject::updateData(std::vector<float> vertices, std::vector<unsigned int> indices) {
+	updatedVertexArray = vertices;
+	updatedIndexArray = indices;
+	needsUpdate = true;
+}
+
+void CgObject::loadUpdatedData() {
+	loadData(updatedVertexArray, updatedIndexArray, this->arrayFormat);
+}
+
 void CgObject::loadTexture(std::string filename) {
 	cv::Mat texture = cv::imread(filename);
 	this->loadTexture(texture);
+}
+
+void CgObject::updateTexture(cv::Mat texture) {
+	needsTextureUpdate = true;
+	textureToUpdate = texture;
+}
+
+void CgObject::loadUpdatedTexture() {
+	glBindTexture(GL_TEXTURE_2D, tex1);
+	glTexSubImage2D(
+		GL_TEXTURE_2D,
+		0,
+		0,
+		0,
+		textureToUpdate.cols,
+		textureToUpdate.rows,
+		GL_BGR,
+		GL_UNSIGNED_BYTE,
+		textureToUpdate.ptr()
+	);
+	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void CgObject::loadTexture(cv::Mat texture) {
@@ -92,7 +125,7 @@ void CgObject::loadTexture(cv::Mat texture) {
 	// set texture filtering parameters
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
+	
 	glTexImage2D(GL_TEXTURE_2D,     // Type of texture
 		0,                 // Pyramid level (for mip-mapping) - 0 is the top level
 		GL_RGB,            // Internal colour format to convert to
