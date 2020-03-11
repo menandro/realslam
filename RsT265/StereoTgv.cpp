@@ -2,7 +2,7 @@
 
 int T265::initStereoTGVL1() {
 	stereotgv = new StereoTgv();
-	stereoScaling = 2.0f;
+	//stereoScaling = 2.0f;
 	// slow but okay settings
 	/*float lambda = 3.0f;
 	float nLevel = 10;
@@ -18,13 +18,13 @@ int T265::initStereoTGVL1() {
 	int nSolverIters = 20;
 	stereotgv->limitRange = 0.5f;
 
-	stereoWidth = (int)(this->width / stereoScaling);
-	stereoHeight = (int)(this->height / stereoScaling);
+	//stereoWidth = (int)(this->width / stereoScaling);
+	//stereoHeight = (int)(this->height / stereoScaling);
 	stereotgv->baseline = 0.0642f;
 	stereotgv->focal = 285.8557f / stereoScaling;
 
-	this->pcX = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
-	this->pcXMasked = cv::Mat::zeros(stereoHeight, stereoWidth, CV_32FC3);
+	this->Xraw = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+	this->X = cv::Mat::zeros(stereoHeight, stereoWidth, CV_32FC3);
 
 	cv::Mat translationVector, calibrationVector;
 	if (stereoScaling == 2.0f) {
@@ -78,7 +78,7 @@ int T265::solveStereoTGVL1() {
 
 		cv::Mat depthVis;
 		//stereotgv->copyStereoToHost(depth);
-		stereotgv->copyStereoToHost(depth, this->pcX, 285.722f / stereoScaling, 286.759f / stereoScaling,
+		stereotgv->copyStereoToHost(depth, this->Xraw, 285.722f / stereoScaling, 286.759f / stereoScaling,
 			420.135f / stereoScaling, 403.394 / stereoScaling,
 			-0.00659769f, 0.0473251f, -0.0458264f, 0.00897725f,
 			-0.0641854f, -0.000218299f, 0.000111253f);
@@ -87,21 +87,33 @@ int T265::solveStereoTGVL1() {
 		clock_t timeElapsed = (clock() - start);
 		//std::cout << "time: " << timeElapsed << " ms" << std::endl;
 
-		this->pcX.copyTo(this->pcXMasked, this->fisheyeMask8);
+		depth.copyTo(depth, fisheyeMask8);
+
+		this->Xraw.copyTo(this->X, this->fisheyeMask8);
 		//cv::imshow("X", pcXMasked);
 		depth.copyTo(depthVis, fisheyeMask8);
-		cv::resize(depthVis, this->depth32f, cv::Size(this->width, this->height));
+
+		//cv::resize(depthVis, this->depth32f, cv::Size(this->width, this->height));
 		showDepthJet("color", depthVis, std::to_string(timeElapsed), 5.0f, false);
-		cv::imshow("equi1", halfFisheye1);
+		//cv::imshow("equi1", halfFisheye1);
 	}
 	else {
+		clock_t start = clock();
 		stereotgv->copyImagesToDevice(equi1, equi2);
 		stereotgv->solveStereoForwardMasked();
 		cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
 		cv::Mat depthVis;
-		stereotgv->copyStereoToHost(depth);
+
+		stereotgv->copyStereoToHost(depth, this->Xraw, 285.722f / stereoScaling, 286.759f / stereoScaling,
+			420.135f / stereoScaling, 403.394 / stereoScaling,
+			-0.00659769f, 0.0473251f, -0.0458264f, 0.00897725f,
+			-0.0641854f, -0.000218299f, 0.000111253f);
+		clock_t timeElapsed = (clock() - start);
+
+		depth.copyTo(depth, fisheyeMask8);
+
 		depth.copyTo(depthVis, fisheyeMask8);
-		showDepthJet("color", depthVis, 5.0f, false);
+		showDepthJet("color", depthVis, std::to_string(timeElapsed), 5.0f, false);
 		cv::imshow("equi1", equi1);
 	}
 

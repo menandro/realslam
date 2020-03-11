@@ -149,8 +149,14 @@
     <ClCompile Include="OpticalFlow.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\filereader\filereader.vcxproj">
+      <Project>{bb4a523f-f4a7-4cf6-812f-141d95ffe99a}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\opticalflow\opticalflow.vcxproj">
       <Project>{27ada003-c94e-4f85-9163-1c875c9f0f3c}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\viewer\viewer.vcxproj">
+      <Project>{2842b4b2-d769-4399-8d04-30ffd563a01e}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

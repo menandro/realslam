@@ -16,6 +16,7 @@
 #include <stereolite/stereolite.h>
 #include <opticalflow/flow.h>
 #include <imu/imu.h>
+#include <atomic>
 
 // Outputs Images, Depth Map, 3D points and IMU
 class T265 {
@@ -34,8 +35,14 @@ public:
 
 	const int width = 848;
 	const int height = 800;
+	cv::Mat intrinsic;
+	cv::Mat distCoeffs;
 
-	// Outputs
+	// Output
+	cv::Mat image;
+	cv::Mat X;
+
+	// Data
 	cv::Mat fisheye1;
 	cv::Mat fisheye2;
 	cv::Mat fisheye132f;
@@ -44,13 +51,12 @@ public:
 	cv::Mat fisheyeMask8;
 	cv::Mat fisheye1texture;
 	cv::Mat fisheye28uc3;
-	cv::Mat pcXmasked;
 	cv::Mat mask;
 
 	// Output Dense Stereo
 	cv::Mat depth32f = cv::Mat(height, width, CV_32F);
 	cv::Mat depthHalf32f = cv::Mat(height / 2, width / 2, CV_32F);
-	cv::Mat pcX, pcXMasked; // 3D points
+	cv::Mat Xraw; // 3D points
 
 	// Output IMU
 	Quaternion ImuRotation;
@@ -65,17 +71,22 @@ public:
 	
 	// Stereo
 	StereoTgv* stereotgv;
-	int stereoWidth = 424;
-	int stereoHeight = 400;
-	float stereoScaling = 2.0f;
+	int stereoWidth;;
+	int stereoHeight;
+	float stereoScaling = 1.0f;
 	int initStereoTGVL1();
 	int solveStereoTGVL1();
 
 	// Functions
+	int initialize(const char* serialNumber, float stereoScaling);
 	int initialize(const char* serialNumber);
 	int run();
+	int stop();
+	int stopThreadCheck();
 	int fetchFrames();
 	int imuPoseSolver();
+	std::atomic<bool> isFetchFramesRunning = false;
+	std::atomic<bool> isImuPoseSolverRunning = false;
 
 	// IMU
 	bool settleImu();

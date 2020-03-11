@@ -19,6 +19,22 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 
+class Keyframe {
+public:
+	Keyframe() {};
+	~Keyframe() {};
+	cv::Mat im;
+	cv::Mat X;
+	std::vector<cv::Point3f> objectPoints;
+
+	// Global Pose
+	cv::Mat R; // Rodrigues Rotation
+	cv::Mat t;
+
+	// Poses and Displays is always WRT to Keyframe
+	cv::Mat Rrel; // Rodrigues Rotation
+	cv::Mat trel;
+};
 
 class FisheyeSlam {
 public:
@@ -32,12 +48,17 @@ public:
 	cv::Mat fisheye2;
 	cv::Mat depth;
 	cv::Mat point3d;
-	cv::Mat fisheyeMask8;
-	cv::Mat fisheyeMask;
+	cv::Mat fisheyeMask8uc1; //8u
+	cv::Mat fisheyeMask32fc1;
 	Quaternion imuRotation;
+
+	cv::Mat intrinsic;
+	cv::Mat distortionCoeffs;
 
 	// Pose Viewer
 	Viewer* viewer;
+	void updateViewerImuPose();
+	void updateViewerCameraPose(cv::Mat Rvec, cv::Mat t);
 
 	// Point Cloud Viewer
 	Viewer* pointcloudViewer;
@@ -45,32 +66,44 @@ public:
 	std::vector<unsigned int> pcIndexArray; // 3-index (triangle);
 	void pointcloudToArray(cv::Mat pc, std::vector<float>& vertexArray, std::vector<unsigned int>& indexArray);
 
-	int initialize(int width, int height);
+	int initialize(int width, int height, cv::Mat intrinsic, cv::Mat distCoeffs, cv::Mat fisheyeMask8uc1);
 	
 
 	// Optical Flow
 	Flow* flow;
 	int flowWidth;
 	int flowHeight;
-	float flowScaling;
+	//float flowScaling;
 	int initOpticalFlow();
 	int solveOpticalFlow(cv::Mat im1, cv::Mat im2);
-	cv::Mat flowTemp, flowTempRgb;
+	cv::Mat flowTemp, flowTempMasked, flowTempRgb;
 
 	// SLAM
+	std::vector<Keyframe> keyframes;
+	int currKFIndex;
 	bool keyframeExist = false;
-	cv::Mat currKfImage;
-	cv::Mat currKfPoint3d;
+	//cv::Mat currKfImage;
+	//cv::Mat currKfPoint3d;
 	//std::queue<cv::Mat> images;
+
 	cv::Mat currImage;
 	cv::Mat prevImage; // For optical flow
-	cv::Mat currPoint3d;
+	cv::Mat currX;
 	Quaternion currImuRotation;
-	bool isImageUpdated = false;
-	bool isImuUpdated = false;
+	std::vector<cv::Point3f> currObjectPoints;
+	std::vector<cv::Point2f> currMatchedPoints;
+
+	std::atomic<bool> isImageUpdated = false;
+	std::atomic<bool> isImuUpdated = false;
 	int run();
 	int updateImageSlam(cv::Mat im, cv::Mat point3d);
 	int updateImu(Quaternion imuRotation);
 	int tracking();
 	int mapping();
+	int visualizePose();
+
+	// Utilities
+	void overlayMatrix(const char* windowName, cv::Mat& im, cv::Mat R1, cv::Mat t);
+	std::string parseDecimal(double f);
+	std::string parseDecimal(double f, int precision);
 };

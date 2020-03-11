@@ -4,8 +4,23 @@ T265::T265() {
 
 }
 
+int T265::initialize(const char* serialNumber, float stereoScaling) {
+	this->stereoScaling = stereoScaling;
+	return this->initialize(serialNumber);
+}
+
 int T265::initialize(const char* serialNumber) {
 	//initStereoTVL1();
+	stereoWidth = (int)(width / stereoScaling);
+	stereoHeight = (int)(height / stereoScaling);
+	double intrinsicData[9] = { 285.722, 0, 420.135, 0, 286.759, 403.394, 0, 0 , 1 };
+	intrinsic = cv::Mat(3, 3, CV_64F, intrinsicData).clone();
+	distCoeffs = cv::Mat(4, 1, CV_64F);
+	distCoeffs.at<double>(0) = -0.00659769;
+	distCoeffs.at<double>(1) = 0.0473251;
+	distCoeffs.at<double>(2) = -0.0458264;
+	distCoeffs.at<double>(3) = 0.00897725;
+
 	initStereoTGVL1();
 
 	try {
@@ -51,15 +66,14 @@ int T265::initialize(const char* serialNumber) {
 		return EXIT_FAILURE;
 	}
 
-	
 	this->fisheye1 = cv::Mat(this->height, this->width, CV_8UC1);
 	this->fisheye2 = cv::Mat(this->height, this->width, CV_8UC1);
 	this->fisheye132f = cv::Mat(this->height, this->width, CV_32F);
 	this->fisheye232f = cv::Mat(this->height, this->width, CV_32F);
 
 	// Create fisheye mask
-	this->fisheyeMask = cv::Mat::zeros(cv::Size(this->width, this->height), CV_8UC1);
-	cv::circle(this->fisheyeMask, cv::Point(this->stereoWidth, this->stereoHeight), this->stereoWidth - 40, cv::Scalar(256.0f), -1);
+	//this->fisheyeMask = cv::Mat::zeros(cv::Size(this->width, this->height), CV_8UC1);
+	//cv::circle(this->fisheyeMask, cv::Point(this->stereoWidth, this->stereoHeight), this->stereoWidth - 40, cv::Scalar(256.0f), -1);
 
 	return 0;
 }
@@ -67,8 +81,29 @@ int T265::initialize(const char* serialNumber) {
 int T265::run() {
 	std::thread t0(&T265::fetchFrames, this);
 	std::thread t1(&T265::imuPoseSolver, this);
-	t0.join();
-	t1.join();
+	isFetchFramesRunning = true;
+	isImuPoseSolverRunning = true;
+	std::thread t2(&T265::stopThreadCheck, this);
+	std::cout << "All threads started" << std::endl;
+
+	t0.detach();
+	t1.detach();
+	t2.detach();
+	//this->pipe->stop();
+	
+	return 0;
+}
+
+int T265::stopThreadCheck() {
+	while (this->isFetchFramesRunning || this->isImuPoseSolverRunning) {
+		std::this_thread::sleep_for(std::chrono::seconds(1)); // So we don't check flags every time
+	}
+	this->stop();
+	std::cout << "Pipe stopped." << std::endl;
+	return 0;
+}
+
+int T265::stop() {
 	this->pipe->stop();
 	return 0;
 }
@@ -99,12 +134,20 @@ int T265::fetchFrames() {
 			CV_8UC1, (void*)fisheye1Data.get_data(), cv::Mat::AUTO_STEP);
 		this->fisheye2 = cv::Mat(cv::Size(this->width, this->height), 
 			CV_8UC1, (void*)fisheye2Data.get_data(), cv::Mat::AUTO_STEP);
+		
+		if (stereoScaling == 2.0f) {
+			cv::resize(this->fisheye1, this->image, cv::Size(stereoWidth, stereoHeight));
+		}
+		else this->image = this->fisheye1;
+
 		solveStereoTGVL1();
 
 		cv::Mat equi1, rgb;
 		cv::equalizeHist(this->fisheye1, equi1);
 		cv::cvtColor(equi1, this->fisheye1texture, cv::COLOR_GRAY2RGB);
 	}
+	isFetchFramesRunning = false;
+	std::cout << "Fetch stopped: " << isFetchFramesRunning << std::endl;
 	return 0;
 }
 
@@ -127,7 +170,7 @@ int T265::imuPoseSolver() {
 				while (readCnt < 20) {
 					if (processGyro() && processAccel()) {
 						// Compute initial imu orientation from accelerometer. set yaw to zero.
-						std::cout << this->accel.x << " " << this->accel.y << " " << this->accel.z << std::endl;
+						//std::cout << this->accel.x << " " << this->accel.y << " " << this->accel.z << std::endl;
 
 						//MALI TO!
 						float g = sqrtf(this->accel.x * this->accel.x + 
@@ -136,16 +179,16 @@ int T265::imuPoseSolver() {
 						float a_x = this->accel.x / g;
 						float a_y = this->accel.y / g;
 						float a_z = this->accel.z / g;
-						std::cout << a_x << " " << a_y << " " << a_z << std::endl;
+						//std::cout << a_x << " " << a_y << " " << a_z << std::endl;
 
 						float thetax = std::atan2f(a_y, a_z);
 						float thetaz = std::atan2f(a_y, a_x);
-						std::cout << thetax << " " << thetaz << std::endl;
+						//std::cout << thetax << " " << thetaz << std::endl;
 
 						//glm::quat q(glm::vec3(-thetax -1.57079632679f, 0.0f, -thetaz));
 						glm::quat q(glm::vec3(thetax, 0.0f, 0.0f));
 						this->ImuRotation = Quaternion(q.x, q.y, q.z, q.w);
-						std::cout << std::fixed << this->gyro.dt << " " << this->accel.dt << std::endl;
+						//std::cout << std::fixed << this->gyro.dt << " " << this->accel.dt << std::endl;
 						readCnt++;
 					}
 				}
@@ -168,6 +211,8 @@ int T265::imuPoseSolver() {
 			//updateViewerImuPose(t265);
 		}
 	}
+	isImuPoseSolverRunning = false;
+	std::cout << "Imu stopped: " << isImuPoseSolverRunning << std::endl;
 	return 0;
 }
 
