@@ -28,8 +28,8 @@ int Tslam::initStereoTVL1() {
 	stereolite->focal = 285.8557f / stereoScaling;
 	stereolite->initialize(stereoWidth, stereoHeight, lambda, theta, tau, nLevel, fScale, nWarpIters, nSolverIters);
 
-	pcX = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
-	pcXMasked = cv::Mat::zeros(stereoHeight, stereoWidth, CV_32FC3);
+	t265.pcX = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+	t265.pcXMasked = cv::Mat::zeros(stereoHeight, stereoWidth, CV_32FC3);
 
 	// Load vector fields
 	cv::Mat translationVector, calibrationVector;
@@ -81,7 +81,7 @@ int Tslam::solveStereoTVL1() {
 		// Just planesweep
 		//stereolite->planeSweepSubpixel();
 		stereolite->planeSweepExponentialDistance();
-		stereolite->copyPlanesweepFinalToHost(t265.depthHalf32f, pcX, 285.722f / stereoScaling, 286.759f / stereoScaling,
+		stereolite->copyPlanesweepFinalToHost(t265.depthHalf32f, t265.pcX, 285.722f / stereoScaling, 286.759f / stereoScaling,
 			420.135f / stereoScaling, 403.394 / stereoScaling,
 			-0.00659769f, 0.0473251f, -0.0458264f, 0.00897725f,
 			-0.0641854f, -0.000218299f, 0.000111253f);
@@ -96,8 +96,8 @@ int Tslam::solveStereoTVL1() {
 		clock_t timeElapsed = (clock() - start);
 		//std::cout << "time: " << timeElapsed << " ms" << std::endl;
 
-		pcX.copyTo(pcXMasked, fisheyeMask8);
-		cv::imshow("X", pcXMasked);
+		t265.pcX.copyTo(t265.pcXMasked, fisheyeMask8);
+		cv::imshow("X", t265.pcXMasked);
 
 		cv::Mat depthVis;
 		t265.depthHalf32f.copyTo(t265.depthHalf32f, fisheyeMask8Half);

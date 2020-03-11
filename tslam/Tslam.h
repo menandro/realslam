@@ -127,10 +127,15 @@ public:
 		cv::Mat fisheyeMask;
 		cv::Mat fisheye1texture;
 		cv::Mat fisheye28uc3;
-		cv::Mat depth32f = cv::Mat(height, width, CV_32F);
-		cv::Mat depthHalf32f = cv::Mat(height / 2, width / 2, CV_32F);
+		cv::Mat pcXmasked;
 		cv::Mat mask;
 
+		// Dense Stereo
+		cv::Mat depth32f = cv::Mat(height, width, CV_32F);
+		cv::Mat depthHalf32f = cv::Mat(height / 2, width / 2, CV_32F);
+		cv::Mat pcX, pcXMasked; // 3D points
+
+		// Obsolete: Keypoint Matching
 		cv::cuda::GpuMat d_fe1;
 		cv::cuda::GpuMat d_fe2;
 		cv::cuda::GpuMat d_fisheyeMask;
@@ -143,7 +148,7 @@ public:
 		cv::Mat descriptorsFe1;
 		cv::Mat descriptorsFe2;
 
-		// Stereo Matching
+		// Obsolete: Stereo Matching using Keypoints
 		std::vector<cv::KeyPoint> stereoKeypoints;
 		std::vector<cv::KeyPoint> stereoKeypointsSrc;
 		std::vector<cv::Point2f> stereoPoints;
@@ -175,7 +180,7 @@ public:
 	// Viewer
 	Viewer* viewer;
 	Viewer* pointcloudViewer;
-	cv::Mat pcX, pcXMasked; // 3D points
+	
 	std::vector<float> pcVertexArray; //3-vertex, 3-normal, 2-texture uv
 	std::vector<unsigned int> pcIndexArray; // 3-index (triangle);
 	void pointcloudToArray(cv::Mat pc, std::vector<float> &vertexArray, std::vector<unsigned int> &indexArray);
@@ -230,6 +235,7 @@ public:
 		std::vector<cv::KeyPoint> &keypoints, cv::cuda::GpuMat &descriptors);
 	//int detectAndComputeOrb(T265 &device);
 	int matchAndPose(T265& device);
+	int solveRelativePose(T265& device, Keyframe* keyframe);
 	int stereoMatching(T265 &device);
 
 	bool settleImu(T265 &device);

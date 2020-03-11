@@ -67,6 +67,11 @@ int Tslam::initialize(const char* serialNumber) {
 	t265.fisheye132f = cv::Mat(t265.height, t265.width, CV_32F);
 	t265.fisheye232f = cv::Mat(t265.height, t265.width, CV_32F);
 
+	// Create fisheye mask
+	t265.fisheyeMask = cv::Mat::zeros(cv::Size(t265.width, t265.height), CV_8UC1);
+	circle(t265.fisheyeMask, cv::Point(stereoWidth, stereoHeight), stereoWidth-40, cv::Scalar(256.0f), -1);
+	t265.d_fisheyeMask.upload(t265.fisheyeMask);
+
 	// Point Cloud
 	pcVertexArray = std::vector<float>(stereoHeight * stereoWidth * 8, 0.0f);
 	pcIndexArray = std::vector<unsigned int>(stereoHeight * stereoWidth * 3);
@@ -210,12 +215,6 @@ int Tslam::cameraPoseSolver() {
 	t265.currentKeyframe->currentRelativeR = cv::Mat::zeros(3, 1, CV_64F);
 	t265.currentKeyframe->currentRelativeT = cv::Mat::zeros(3, 1, CV_64F);
 
-	// Create fisheye mask
-	t265.fisheyeMask = cv::Mat::zeros(cv::Size(848, 800), CV_8UC1);
-	circle(t265.fisheyeMask, cv::Point(424, 400), 385, cv::Scalar(256.0f), -1);
-	//cv::imshow("fisheye mask", t265.fisheyeMask);
-	t265.d_fisheyeMask.upload(t265.fisheyeMask);
-
 	FileReader *floorFile = new FileReader();
 	floorFile->readObj("floor.obj", FileReader::ArrayFormat::VERTEX_NORMAL_TEXTURE, 0.03f);
 
@@ -229,28 +228,12 @@ int Tslam::cameraPoseSolver() {
 		}
 		previousFrame = t265.fisheye1.clone();
 
-		//if (!(processDepth(device0) && processIr(device0))) continue;
-		//upsampleDepth(device0);
-		//visualizeDepth(device0);
-		//createDepthThresholdMask(device0, 2.0f);
-
-		// Detect Feature points
-		/*detectAndComputeOrb(t265.fisheye1, t265.d_fe1, t265.keypointsFe1, t265.d_descriptorsFe1);
-		detectAndComputeOrb(t265.fisheye2, t265.d_fe2, t265.keypointsFe2, t265.d_descriptorsFe2);*/
-		/*cv::Mat equi1, equi2;
-		cv::equalizeHist(t265.fisheye1, equi1);
-		cv::equalizeHist(t265.fisheye2, equi2);
-		cv::imwrite("fs1.png", equi1);
-		cv::imwrite("fs2.png", equi2);*/
-		//visualizeKeypoints(t265, "kp");
-
 		// Solve Stereo
 		solveStereoTGVL1();
 		//solveStereoTVL1();
+
 		if (pointcloudViewer->isRunning) {
-			// Separate pcX channels and convert to vertex array 3-3-2 format
-			//std::cout << pcX.at<cv::Vec3f>(200, 212)[0] << std::endl;
-			pointcloudToArray(pcXMasked, pcVertexArray, pcIndexArray);
+			pointcloudToArray(t265.pcXMasked, pcVertexArray, pcIndexArray);
 			pointcloudViewer->cgObject->at(1)->updateTexture(t265.fisheye1texture);
 			pointcloudViewer->cgObject->at(1)->updateData(pcVertexArray, pcIndexArray);
 			
@@ -263,32 +246,9 @@ int Tslam::cameraPoseSolver() {
 		}
 		isFirstFlowFrame = false;
 
-		//cv::Mat depthUpsample = cv::Mat(stereoHeight, upsampling->iAlignUp(stereoWidth), CV_32F);
-		//cv::Mat depthPad, imagePad;
-		//cv::copyMakeBorder(depthVis, depthPad, 0, 0, 0, upsampling->iAlignUp(stereoWidth) - stereoWidth, cv::BORDER_CONSTANT, 0);
-		//cv::copyMakeBorder(halfFisheye1, imagePad, 0, 0, 0, upsampling->iAlignUp(stereoWidth) - stereoWidth, cv::BORDER_CONSTANT, 0);
-		////std::cout << depth.size() << " " << depthVis.size() << std::endl;
-		//upsampling->copyImagesToDevice(imagePad, depthPad);
-		////upsampling->propagateColorOnly(10);
-		//upsampling->optimizeOnly();
-		////upsampling->solve();
-		//upsampling->copyImagesToHost(depthUpsample);
-		//depthUpsample = depthUpsample * this->maxUpsamplingDepth;
-		////std::cout << equi1.at<float>(200, 200) << std::endl;
-		//showDepthJet("upsample", depthUpsample, 5.0f, false);
-
-		//std::cout << depth.at<float>(cv::Point(424, 400)) << std::endl;
-		/*cv::Mat uvrgb = cv::Mat(t265.height, t265.width, CV_32FC3);
-		stereo->copyOpticalFlowVisToHost(uvrgb);
-		cv::imshow("flow", uvrgb);*/
-		
-
-		/*stereoMatching(t265);
-		visualizeMatchedStereoPoints(t265, "stereo");*/
-
 		// Match with keyframe
-		//matchAndPose(t265);
-		//matchAndPose(device1);
+		matchAndPose(t265);
+
 		//visualizeRelativeKeypoints(device0.currentKeyframe, device0.infrared1, "dev0");
 		//visualizeRelativeKeypoints(device1.currentKeyframe, device1.infrared1, "dev1");
 
@@ -318,14 +278,29 @@ int Tslam::matchAndPose(T265& device) {
 	if (!device.keyframeExist) {
 		device.currentKeyframe->im = device.fisheye1.clone();
 		device.currentKeyframe->d_im.upload(device.currentKeyframe->im);
-		device.currentKeyframe->keypoints = device.keypointsFe1;
-		device.currentKeyframe->d_descriptors = device.d_descriptorsFe1.clone();
+		device.currentKeyframe->depth = device.depth32f;
+		/*device.currentKeyframe->keypoints = device.keypointsFe1;
+		device.currentKeyframe->d_descriptors = device.d_descriptorsFe1.clone();*/
 		device.keyframeExist = true;
 	}
 	else {
 		//relativeMatchingDefaultStereo(device, device.currentKeyframe, device.infrared1);
-		//solveRelativePose(device, device.currentKeyframe);
+		solveRelativePose(device, device.currentKeyframe);
 	}
+	return 0;
+}
+
+int Tslam::solveRelativePose(T265& device, Keyframe* keyframe) {
+
+	//std::cout << this->intrinsic << std::endl;
+	// Solve pose of keyframe wrt to current frame
+	//if (keyframe->matchedPoints.size() >= 15) {
+		/*cv::solvePnPRansac(keyframe->objectPointsSrc, keyframe->matchedPoints,
+			device.intrinsic, device.distCoeffs,
+			keyframe->currentRelativeR, keyframe->currentRelativeT);*/
+		//cv::solvePnP(keyframe->objectPointsSrc, keyframe->matchedPoints, this->intrinsic, this->distCoeffs, keyframe->R, keyframe->t, false);
+	//}
+	// Convert R and t to the current frame
 	return 0;
 }
 
@@ -1006,3 +981,103 @@ stereo->copyPlaneSweepToHost(planeSweepDepth);
 cv::Mat planeSweepDepthVis;
 planeSweepDepth.copyTo(planeSweepDepthVis, depthVisMask);
 showDepthJet("psdepth", planeSweepDepthVis, 5.0f, false);*/
+
+//int Tslam::cameraPoseSolver() {
+//	t265.currentKeyframe = new Keyframe();
+//	t265.keyframeExist = false;
+//	t265.currentKeyframe->R = cv::Mat::zeros(3, 1, CV_64F);
+//	t265.currentKeyframe->t = cv::Mat::zeros(3, 1, CV_64F);
+//	t265.currentKeyframe->currentRelativeR = cv::Mat::zeros(3, 1, CV_64F);
+//	t265.currentKeyframe->currentRelativeT = cv::Mat::zeros(3, 1, CV_64F);
+//
+//
+//
+//	FileReader* floorFile = new FileReader();
+//	floorFile->readObj("floor.obj", FileReader::ArrayFormat::VERTEX_NORMAL_TEXTURE, 0.03f);
+//
+//	cv::Mat previousFrame;
+//	bool isFirstFlowFrame = true;
+//	while (true) {
+//		char pressed = cv::waitKey(10);
+//		if (pressed == 27) break;
+//		if (pressed == 'r') {
+//			t265.keyframeExist = false; // change this to automatic keyframing
+//		}
+//		previousFrame = t265.fisheye1.clone();
+//
+//		//if (!(processDepth(device0) && processIr(device0))) continue;
+//		//upsampleDepth(device0);
+//		//visualizeDepth(device0);
+//		//createDepthThresholdMask(device0, 2.0f);
+//
+//		// Detect Feature points
+//		/*detectAndComputeOrb(t265.fisheye1, t265.d_fe1, t265.keypointsFe1, t265.d_descriptorsFe1);
+//		detectAndComputeOrb(t265.fisheye2, t265.d_fe2, t265.keypointsFe2, t265.d_descriptorsFe2);*/
+//		/*cv::Mat equi1, equi2;
+//		cv::equalizeHist(t265.fisheye1, equi1);
+//		cv::equalizeHist(t265.fisheye2, equi2);
+//		cv::imwrite("fs1.png", equi1);
+//		cv::imwrite("fs2.png", equi2);*/
+//		//visualizeKeypoints(t265, "kp");
+//
+//		// Solve Stereo
+//		solveStereoTGVL1();
+//		//solveStereoTVL1();
+//		if (pointcloudViewer->isRunning) {
+//			// Separate pcX channels and convert to vertex array 3-3-2 format
+//			//std::cout << pcX.at<cv::Vec3f>(200, 212)[0] << std::endl;
+//			pointcloudToArray(pcXMasked, pcVertexArray, pcIndexArray);
+//			pointcloudViewer->cgObject->at(1)->updateTexture(t265.fisheye1texture);
+//			pointcloudViewer->cgObject->at(1)->updateData(pcVertexArray, pcIndexArray);
+//
+//		}
+//		//createDepthThresholdMask(t265, 1.0f);
+//
+//		// Solve Optical Flow
+//		if (!isFirstFlowFrame) {
+//			solveOpticalFlow(t265.fisheye1, previousFrame);
+//		}
+//		isFirstFlowFrame = false;
+//
+//		//cv::Mat depthUpsample = cv::Mat(stereoHeight, upsampling->iAlignUp(stereoWidth), CV_32F);
+//		//cv::Mat depthPad, imagePad;
+//		//cv::copyMakeBorder(depthVis, depthPad, 0, 0, 0, upsampling->iAlignUp(stereoWidth) - stereoWidth, cv::BORDER_CONSTANT, 0);
+//		//cv::copyMakeBorder(halfFisheye1, imagePad, 0, 0, 0, upsampling->iAlignUp(stereoWidth) - stereoWidth, cv::BORDER_CONSTANT, 0);
+//		////std::cout << depth.size() << " " << depthVis.size() << std::endl;
+//		//upsampling->copyImagesToDevice(imagePad, depthPad);
+//		////upsampling->propagateColorOnly(10);
+//		//upsampling->optimizeOnly();
+//		////upsampling->solve();
+//		//upsampling->copyImagesToHost(depthUpsample);
+//		//depthUpsample = depthUpsample * this->maxUpsamplingDepth;
+//		////std::cout << equi1.at<float>(200, 200) << std::endl;
+//		//showDepthJet("upsample", depthUpsample, 5.0f, false);
+//
+//		//std::cout << depth.at<float>(cv::Point(424, 400)) << std::endl;
+//		/*cv::Mat uvrgb = cv::Mat(t265.height, t265.width, CV_32FC3);
+//		stereo->copyOpticalFlowVisToHost(uvrgb);
+//		cv::imshow("flow", uvrgb);*/
+//
+//
+//		/*stereoMatching(t265);
+//		visualizeMatchedStereoPoints(t265, "stereo");*/
+//
+//		// Match with keyframe
+//		//matchAndPose(t265);
+//		//matchAndPose(device1);
+//		//visualizeRelativeKeypoints(device0.currentKeyframe, device0.infrared1, "dev0");
+//		//visualizeRelativeKeypoints(device1.currentKeyframe, device1.infrared1, "dev1");
+//
+//		/*Device viewDevice = device0;
+//		viewDevice.Rvec = viewDevice.currentKeyframe->currentRelativeR;
+//		viewDevice.t = viewDevice.currentKeyframe->currentRelativeT;
+//		this->Rvec = viewDevice.Rvec;
+//		this->t = viewDevice.t;
+//		cv::Mat im = cv::Mat::zeros(100, 300, CV_8UC3);
+//		im.setTo(cv::Scalar(50, 50, 50));
+//		overlayMatrix("pose", im, this->Rvec, this->t);
+//
+//		updateViewerCameraPose(device0);*/
+//	}
+//	return 0;
+//}

@@ -23,8 +23,8 @@ int Tslam::initStereoTGVL1() {
 	stereotgv->baseline = 0.0642f;
 	stereotgv->focal = 285.8557f / stereoScaling;
 
-	pcX = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
-	pcXMasked = cv::Mat::zeros(stereoHeight, stereoWidth, CV_32FC3);
+	t265.pcX = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+	t265.pcXMasked = cv::Mat::zeros(stereoHeight, stereoWidth, CV_32FC3);
 
 	cv::Mat translationVector, calibrationVector;
 	if (stereoScaling == 2.0f) {
@@ -77,8 +77,8 @@ int Tslam::solveStereoTGVL1() {
 		cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
 		
 		cv::Mat depthVis;
-		stereotgv->copyStereoToHost(depth);
-		stereotgv->copyStereoToHost(depth, pcX, 285.722f / stereoScaling, 286.759f / stereoScaling,
+		//stereotgv->copyStereoToHost(depth);
+		stereotgv->copyStereoToHost(depth, t265.pcX, 285.722f / stereoScaling, 286.759f / stereoScaling,
 			420.135f / stereoScaling, 403.394 / stereoScaling,
 			-0.00659769f, 0.0473251f, -0.0458264f, 0.00897725f,
 			-0.0641854f, -0.000218299f, 0.000111253f);
@@ -87,7 +87,7 @@ int Tslam::solveStereoTGVL1() {
 		clock_t timeElapsed = (clock() - start);
 		//std::cout << "time: " << timeElapsed << " ms" << std::endl;
 
-		pcX.copyTo(pcXMasked, fisheyeMask8);
+		t265.pcX.copyTo(t265.pcXMasked, fisheyeMask8);
 		//cv::imshow("X", pcXMasked);
 		depth.copyTo(depthVis, fisheyeMask8);
 		cv::resize(depthVis, t265.depth32f, cv::Size(t265.width, t265.height));
