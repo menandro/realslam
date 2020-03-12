@@ -67,14 +67,16 @@ int FisheyeSlam::tracking() {
 			keyframeExist = true;
 		}
 		else {
+			auto kf = keyframes[currKFIndex];
+
 			// Track with keyframe
 			//cv::imshow("im1", currImage);
 			//cv::imshow("im2", prevImage);
-			solveOpticalFlow(prevImage, currImage);
+			solveOpticalFlow(kf.im, currImage);
 			prevImage = currImage.clone();
 
 			// Solve PnP - For Fisheye (no undistortion)
-			auto kf = keyframes[currKFIndex];
+			
 			cv::imshow("kf", kf.X);
 			try {
 				//std::cout << kf.objectPoints.size() << " " << currMatchedPoints.size() << std::endl;
