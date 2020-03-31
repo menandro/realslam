@@ -180,6 +180,10 @@ public:
 	void ComputeDerivativesFisheyeEquidistant(float *I0, float *I1,
 		float focal, float cx, float cy, float tx, float ty, float tz,
 		int w, int h, int s, float *Iw, float *Iz);
+	void ComputeCensusFisheye(float* I0, float* I1, float2* vector, TODO:
+		int w, int h, int s, float* Icen0, float* Icen1);
+	void ComputeCensusDerivativesFisheye(float* Icen0, float* Icen1, float2* vector, TODO:
+		int w, int h, int s, float* Iw, float* Iz);
 	void Upscale(const float *src, int width, int height, int stride,
 		int newWidth, int newHeight, int newStride, float scale, float *out);
 	void Upscale(const float2 *src, int width, int height, int stride,

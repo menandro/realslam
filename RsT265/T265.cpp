@@ -40,15 +40,15 @@ int T265::initialize(const char* serialNumber) {
 				this->serialNo = serialNumber;
 				this->pipe = new rs2::pipeline(*ctx);
 
-				std::cout << "Configuring " << serialNo << std::endl;
+				std::cout << "Configuring: " << serialNo << std::endl;
 				this->cfg.enable_stream(RS2_STREAM_FISHEYE, 1, 848, 800, rs2_format::RS2_FORMAT_Y8, 30);
 				this->cfg.enable_stream(RS2_STREAM_FISHEYE, 2, 848, 800, rs2_format::RS2_FORMAT_Y8, 30);
 				this->cfg.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F, 62);
 				this->cfg.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F, 200);
 
+				std::cout << "Config file created for: " << serialNo << std::endl;
 				auto prof = this->pipe->start(this->cfg);
 				// Disable auto-exposure
-
 
 				this->isFound = true;
 				std::cout << "Pipe created from: " << serialNo << std::endl;
