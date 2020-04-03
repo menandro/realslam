@@ -43,6 +43,7 @@ public:
 	int nSolverIters;
 	int nWarpIters;
 	float limitRange = 1.0f;
+	float censusThreshold = 1.0f / 255.0f;
 
 	// Inputs and Outputs
 	cv::Mat im0pad, im1pad;
@@ -112,6 +113,7 @@ public:
 	int copyMaskToDevice(cv::Mat mask);
 	int solveStereoForward();
 	int solveStereoForwardMasked();
+	int solveStereoForwardCensusMasked();
 	int solveStereoTrajectoryPerIteration(float fov, float cx, float cy, float tx, float ty, float tz);
 	int copyStereoToHost(cv::Mat &wCropped);
 	int copyStereoToHost(cv::Mat &croppedDepth, cv::Mat &croppedX, float focalx, float focaly,
@@ -180,10 +182,14 @@ public:
 	void ComputeDerivativesFisheyeEquidistant(float *I0, float *I1,
 		float focal, float cx, float cy, float tx, float ty, float tz,
 		int w, int h, int s, float *Iw, float *Iz);
-	void ComputeCensusFisheye(float* I0, float* I1, float2* vector, TODO:
-		int w, int h, int s, float* Icen0, float* Icen1);
-	void ComputeCensusDerivativesFisheye(float* Icen0, float* Icen1, float2* vector, TODO:
-		int w, int h, int s, float* Iw, float* Iz);
+
+	// Compute hamming distance of census transform
+	void ComputeCensusFisheye(float* I0, float* I1, float eps,
+		int w, int h, int s, float* Iz);
+	// Comput first derivative of hamming distance of census transform
+	void ComputeCensusDerivativesFisheye(float* Iz, float2* vector,
+		int w, int h, int s, float* Iw);
+
 	void Upscale(const float *src, int width, int height, int stride,
 		int newWidth, int newHeight, int newStride, float scale, float *out);
 	void Upscale(const float2 *src, int width, int height, int stride,

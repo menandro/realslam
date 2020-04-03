@@ -86,8 +86,70 @@ void StereoTgv::ComputeDerivatives(float *I0, float *I1,
 // Fisheye Stereo Census Transform
 //****************************************
 __global__
-void TgvComputeCensusFisheyeKernel(float2* vector, int width, int height, int stride,
-	float* Iw, float* Iz)
+void TgvComputeCensusFisheyeKernel(float * I0, float * I1, float eps, int width, int height, int stride,
+	float* Iz)
+{
+	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
+	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
+
+	const int pos = ix + iy * stride;
+
+	if (ix >= width || iy >= height) return;
+
+	float centerPix0 = I0[pos];
+	float centerPix1 = I1[pos];
+	// 3x3 window
+	float hamming = 0.0f;
+	int windowRadius = 3;
+	int pixCount = 0;
+	for (int j = -windowRadius; j <= windowRadius; j++) {
+		for (int i = -windowRadius; i <= windowRadius; i++) {
+			//get values
+			int col = (ix + i);
+			int row = (iy + j);
+			if ((col >= 0) && (col < width) && (row >= 0) && (row < height)) {
+				float currPix0 = I0[col + row * stride];
+				float currPix1 = I1[col + row * stride];
+				float appendBit0, appendBit1;
+				if ((j != 0) && (i != 0)) {
+					if ((centerPix0 - currPix0) > eps) appendBit0 = 0.0f;
+					else if (fabs(centerPix0 - currPix0) < eps) appendBit0 = 1.0f;
+					else appendBit0 = 2.0f;
+
+					if ((centerPix1 - currPix1) > eps) appendBit1 = 0.0f;
+					else if (fabs(centerPix1 - currPix1) < eps) appendBit1 = 1.0f;
+					else appendBit1 = 2.0f;	
+					
+					if (appendBit0 != appendBit1) {
+						hamming = hamming + 1.0f;
+					}
+				}
+				pixCount++;
+			}
+		}
+	}
+
+	Iz[pos] = hamming / (float)pixCount;
+	//Iz[pos] = (2.0f * hamming / (float)pixCount) - 1.0f;
+}
+
+
+void StereoTgv::ComputeCensusFisheye(float* I0, float* I1, float eps,
+	int w, int h, int s, float* Iz)
+{
+	dim3 threads(BlockWidth, BlockHeight);
+	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
+
+	TgvComputeCensusFisheyeKernel << < blocks, threads >> > (I0, I1, eps, w, h, s, Iz);
+}
+
+
+//****************************************
+// Fisheye Stereo Census Transform Derivative
+//****************************************
+__global__
+void TgvComputeCensusDerivativesFisheyeKernel(float2* vector, int width, int height, int stride,
+	float* Iw)
 {
 	const int ix = threadIdx.x + blockIdx.x * blockDim.x;
 	const int iy = threadIdx.y + blockIdx.y * blockDim.y;
@@ -114,23 +176,13 @@ void TgvComputeCensusFisheyeKernel(float2* vector, int width, int height, int st
 	t0 += tex2D(texI0, x + 1.0f * dx, y + 1.0f * dy) * 8.0f;
 	t0 -= tex2D(texI0, x + 2.0f * dx, y + 2.0f * dy);
 	t0 /= 12.0f;
-
-	float t1;
-	t1 = tex2D(texI1, x - 2.0f * dx, y - 2.0f * dy);
-	t1 -= tex2D(texI1, x - 1.0f * dx, y - 1.0f * dy) * 8.0f;
-	t1 += tex2D(texI1, x + 1.0f * dx, y + 1.0f * dy) * 8.0f;
-	t1 -= tex2D(texI1, x + 2.0f * dx, y + 2.0f * dy);
-	t1 /= 12.0f;
-
-	Iw[pos] = (t0 + t1) * 0.5f;
-
-	// t derivative
-	Iz[pos] = tex2D(texI1, x, y) - tex2D(texI0, x, y);
+	
+	Iw[pos] = t0;
 }
 
-
-void StereoTgv::ComputeCensusFisheye(float* I0, float* I1, float2* vector,
-	int w, int h, int s, float* Iw, float* Iz)
+///CUDA CALL FUNCTIONS ***********************************************************
+void StereoTgv::ComputeCensusDerivativesFisheye(float* Iz, float2* vector,
+	int w, int h, int s, float* Iw)
 {
 	dim3 threads(BlockWidth, BlockHeight);
 	dim3 blocks(iDivUp(w, threads.x), iDivUp(h, threads.y));
@@ -140,22 +192,11 @@ void StereoTgv::ComputeCensusFisheye(float* I0, float* I1, float2* vector,
 	texI0.addressMode[1] = cudaAddressModeMirror;
 	texI0.filterMode = cudaFilterModeLinear;
 	texI0.normalized = true;
+	
+	cudaBindTexture2D(0, texI0, Iz, w, h, s * sizeof(float));
 
-	texI1.addressMode[0] = cudaAddressModeMirror;
-	texI1.addressMode[1] = cudaAddressModeMirror;
-	texI1.filterMode = cudaFilterModeLinear;
-	texI1.normalized = true;
-
-	//cudaChannelFormatDesc desc = cudaCreateChannelDesc<float>();
-
-	cudaBindTexture2D(0, texI0, I0, w, h, s * sizeof(float));
-	cudaBindTexture2D(0, texI1, I1, w, h, s * sizeof(float));
-
-	TgvComputeCensusFisheyeKernel << < blocks, threads >> > (vector, w, h, s, Iw, Iz);
+	TgvComputeCensusDerivativesFisheyeKernel << < blocks, threads >> > (vector, w, h, s, Iw);
 }
-
-
-
 
 
 

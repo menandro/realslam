@@ -17,6 +17,7 @@ int T265::initStereoTGVL1() {
 	int nWarpIters = 5;
 	int nSolverIters = 20;
 	stereotgv->limitRange = 0.5f;
+	stereotgv->censusThreshold = 1.0f / 255.0f;
 
 	//stereoWidth = (int)(this->width / stereoScaling);
 	//stereoHeight = (int)(this->height / stereoScaling);
@@ -68,12 +69,15 @@ int T265::solveStereoTGVL1() {
 
 	if (stereoScaling == 2.0f) {
 		cv::Mat halfFisheye1, halfFisheye2;
-		cv::resize(equi1, halfFisheye1, cv::Size(stereoWidth, stereoHeight));
-		cv::resize(equi2, halfFisheye2, cv::Size(stereoWidth, stereoHeight));
+		//cv::resize(equi1, halfFisheye1, cv::Size(stereoWidth, stereoHeight));
+		//cv::resize(equi2, halfFisheye2, cv::Size(stereoWidth, stereoHeight));
+		cv::resize(this->fisheye1, halfFisheye1, cv::Size(stereoWidth, stereoHeight));
+		cv::resize(this->fisheye2, halfFisheye2, cv::Size(stereoWidth, stereoHeight));
 
 		clock_t start = clock();
 		stereotgv->copyImagesToDevice(halfFisheye1, halfFisheye2);
-		stereotgv->solveStereoForwardMasked();
+		//stereotgv->solveStereoForwardMasked();
+		stereotgv->solveStereoForwardCensusMasked();
 		cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
 
 		cv::Mat depthVis;

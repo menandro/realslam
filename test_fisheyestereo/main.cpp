@@ -1,6 +1,21 @@
 #include "main.h"
 
 int main(int argc, char *argv[]) {
+	test_censusTransform();
+
+	//*************************
+	// FINAL
+	//std::cout << "Usage: ./exe c:/mainfolder startframe endframe imagescale" << std::endl;
+	//std::string mainfolder = std::string(argv[1]);
+	//int startFrame = atoi(argv[2]);
+	//int endFrame = atoi(argv[3]);
+	//float scaling = atof(argv[4]);
+	//std::cout << mainfolder << " " << startFrame << " " << endFrame << std::endl;
+	//test_ImageSequenceFlow(mainfolder, startFrame, endFrame, scaling);
+	// FINAL END
+	//**************************
+
+
 	//test_BlenderPerspectiveDataSequence();
 	//test_SolveTrajectoryPerWarpingBlenderDataAll();
 	//test_SolveTrajectoryPerWarpingBlenderData();
@@ -22,13 +37,7 @@ int main(int argc, char *argv[]) {
 	////test_ImageSequencePlanesweep(mainfolder, startFrame, endFrame);
 	//test_ImageSequence(mainfolder, startFrame, endFrame);
 
-	std::cout << "Usage: ./exe c:/mainfolder startframe endframe imagescale" << std::endl;
-	std::string mainfolder = std::string(argv[1]);
-	int startFrame = atoi(argv[2]);
-	int endFrame = atoi(argv[3]);
-	float scaling = atof(argv[4]);
-	std::cout << mainfolder << " " << startFrame << " " << endFrame << std::endl;
-	test_ImageSequenceFlow(mainfolder, startFrame, endFrame, scaling);
+	
 
 	//test_PlaneSweep();
 	//test_ImageSequenceLite();

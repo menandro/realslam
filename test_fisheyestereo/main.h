@@ -37,6 +37,9 @@
 #pragma comment(lib, LIB_PATH "opencv_cudaimgproc" CV_VER_NUM LIB_EXT)
 #pragma comment(lib, LIB_PATH "opencv_video" CV_VER_NUM LIB_EXT)
 
+// New
+int test_censusTransform();
+
 // Revision
 int test_BlenderPerspectiveDataSequence();
 int test_SolveTrajectoryPerWarpingBlenderDataAll();
