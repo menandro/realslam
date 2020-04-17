@@ -166,7 +166,7 @@ void TgvComputeCensusDerivativesFisheyeKernel(float2* vector, int width, int hei
 	float dx = (vx / r) / (float)width;
 	float dy = (vy / r) / (float)height;
 
-	float x = ((float)ix + 0.5f) / (float)width;
+	float x = ((float)ix + 0.5f) / (float)width; 
 	float y = ((float)iy + 0.5f) / (float)height;
 
 	float t0;

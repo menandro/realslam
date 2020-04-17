@@ -38,6 +38,7 @@
 #pragma comment(lib, LIB_PATH "opencv_video" CV_VER_NUM LIB_EXT)
 
 // New
+int test_radiallyBiasedOptimization();
 int test_censusTransform();
 
 // Revision

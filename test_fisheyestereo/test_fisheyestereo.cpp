@@ -9,6 +9,109 @@ int readCalibFileFaro(std::string filename, cv::Mat &K, cv::Mat &R, cv::Mat &t) 
 	return 0;
 }
 
+int test_radiallyBiasedOptimization() {
+	std::string mainfolder = "h:/data_rs_iis/20190909";
+	int startFrame = 303;
+	int endFrame = 303;
+
+	StereoTgv* stereotgv = new StereoTgv();
+	int width = 848;
+	int height = 800;
+	float stereoScaling = 1.0f;
+	int nLevel = 12;
+	float fScale = 1.2f;// 2.0f;
+	int nWarpIters = 400;// 10;
+	int nSolverIters = 100;// 20;
+	float lambda = 1.5f;
+	stereotgv->limitRange = 0.1f;
+	float maxDepthVis = 10.0f;
+	double sigmaBlur = 0.1;
+	stereotgv->censusThreshold = 5.0f / 255.0f;
+
+	int stereoWidth = (int)((float)width / stereoScaling);
+	int stereoHeight = (int)((float)height / stereoScaling);
+	stereotgv->baseline = 0.0642f;
+	stereotgv->focal = 285.8557f / stereoScaling;
+	cv::Mat translationVector, calibrationVector;
+	if (stereoScaling == 2.0f) {
+		translationVector = cv::readOpticalFlow("h:/data_rs_iis/translationVectorHalf.flo");
+		calibrationVector = cv::readOpticalFlow("h:/data_rs_iis/calibrationVectorHalf.flo");
+	}
+	else {
+		translationVector = cv::readOpticalFlow("h:/data_rs_iis/translationVector.flo");
+		calibrationVector = cv::readOpticalFlow("h:/data_rs_iis/calibrationVector.flo");
+	}
+
+	float beta = 4.0f;
+	float gamma = 0.2f;
+	float alpha0 = 17.0f;
+	float alpha1 = 1.2f;
+	float timeStepLambda = 1.0f;
+
+	stereotgv->initialize(stereoWidth, stereoHeight, beta, gamma, alpha0, alpha1,
+		timeStepLambda, lambda, nLevel, fScale, nWarpIters, nSolverIters);
+	stereotgv->visualizeResults = true;
+
+	cv::Mat mask = cv::Mat::zeros(cv::Size(stereoWidth, stereoHeight), CV_8UC1);
+	circle(mask, cv::Point(stereoWidth / 2, stereoHeight / 2), stereoWidth / 2 - (int)(40 / stereoScaling), cv::Scalar(256.0f), -1);
+	cv::Mat fisheyeMask;
+	mask.convertTo(fisheyeMask, CV_32F, 1.0 / 255.0);
+
+	stereotgv->copyMaskToDevice(fisheyeMask);
+
+	// Load vector fields
+	stereotgv->loadVectorFields(translationVector, calibrationVector);
+
+	cv::Mat halfFisheye1, halfFisheye2;
+	cv::Mat equi1, equi2;
+
+	for (int k = startFrame; k <= endFrame; k++) {
+		cv::Mat im1 = cv::imread(mainfolder + "/colored_0/data/im" + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
+		cv::Mat im2 = cv::imread(mainfolder + "/colored_1/data/im" + std::to_string(k) + ".png", cv::IMREAD_GRAYSCALE);
+
+		cv::equalizeHist(im1, equi1);
+		cv::equalizeHist(im2, equi2);
+		cv::resize(equi1, halfFisheye1, cv::Size(stereoWidth, stereoHeight));
+		cv::resize(equi2, halfFisheye2, cv::Size(stereoWidth, stereoHeight));
+		clock_t start = clock();
+
+		stereotgv->copyImagesToDevice(halfFisheye1, halfFisheye2);
+		stereotgv->solveStereoForwardMasked();
+
+		cv::Mat depth = cv::Mat(stereoHeight, stereoWidth, CV_32F);
+		cv::Mat depthVis;
+		cv::Mat Xraw = cv::Mat(stereoHeight, stereoWidth, CV_32FC3);
+		stereotgv->copyStereoToHost(depth, Xraw, 285.722f / stereoScaling, 286.759f / stereoScaling,
+			420.135f / stereoScaling, 403.394 / stereoScaling,
+			-0.00659769f, 0.0473251f, -0.0458264f, 0.00897725f,
+			-0.0641854f, -0.000218299f, 0.000111253f);
+
+		clock_t timeElapsed = (clock() - start);
+		std::cout << "time: " << timeElapsed << " ms" << std::endl;
+
+		depth.copyTo(depthVis, mask);
+		showDepthJetExponential("color", depthVis, maxDepthVis, 0.5f, false);
+
+		std::string appender;
+		if (k < 10) appender = "000";
+		else if ((k >= 10) && (k < 100)) appender = "00";
+		else if ((k >= 100) && (k < 1000)) appender = "0";
+		else appender = "";
+
+		cv::Mat depth16;
+		depthVis.convertTo(depth16, CV_16U, 256.0f);
+		cv::imwrite(mainfolder + "/outputradiallybiased/im" + appender + std::to_string(k) + ".png", depth16);
+		saveDepthJetExponential(mainfolder + "/error/radiallybiased/im" + appender + std::to_string(k) + ".png",
+			depthVis, maxDepthVis, 0.5f);
+
+		std::cout << k << std::endl;
+		//cv::imshow("test", halfFisheye1);
+		cv::waitKey(1);
+	}
+	cv::waitKey();
+	return 0;
+}
+
 int test_censusTransform () {
 	std::string mainfolder = "h:/data_rs_iis/20190909";
 	int startFrame = 303;
