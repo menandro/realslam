@@ -49,6 +49,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vanishingpointfisheye", "va
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_vanishingpoint", "test_vanishingpoint\test_vanishingpoint.vcxproj", "{CE18DE68-400D-4DFA-B54D-E593C0D2FB0F}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_opticalflow", "test_opticalflow\test_opticalflow.vcxproj", "{C78A5AD1-640E-4485-A869-A2309E5B2A0A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -241,6 +243,14 @@ Global
 		{CE18DE68-400D-4DFA-B54D-E593C0D2FB0F}.Release|x64.Build.0 = Release|x64
 		{CE18DE68-400D-4DFA-B54D-E593C0D2FB0F}.Release|x86.ActiveCfg = Release|Win32
 		{CE18DE68-400D-4DFA-B54D-E593C0D2FB0F}.Release|x86.Build.0 = Release|Win32
+		{C78A5AD1-640E-4485-A869-A2309E5B2A0A}.Debug|x64.ActiveCfg = Debug|x64
+		{C78A5AD1-640E-4485-A869-A2309E5B2A0A}.Debug|x64.Build.0 = Debug|x64
+		{C78A5AD1-640E-4485-A869-A2309E5B2A0A}.Debug|x86.ActiveCfg = Debug|Win32
+		{C78A5AD1-640E-4485-A869-A2309E5B2A0A}.Debug|x86.Build.0 = Debug|Win32
+		{C78A5AD1-640E-4485-A869-A2309E5B2A0A}.Release|x64.ActiveCfg = Release|x64
+		{C78A5AD1-640E-4485-A869-A2309E5B2A0A}.Release|x64.Build.0 = Release|x64
+		{C78A5AD1-640E-4485-A869-A2309E5B2A0A}.Release|x86.ActiveCfg = Release|Win32
+		{C78A5AD1-640E-4485-A869-A2309E5B2A0A}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

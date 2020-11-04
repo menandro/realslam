@@ -695,6 +695,7 @@ int StereoTgv::solveStereoForwardCensusMasked() {
 	return 0;
 }
 
+// Calculate the Epipolar Curve per Iteration
 int StereoTgv::solveStereoTrajectoryPerIteration(float fov, float cx, float cy, float tx, float ty, float tz) {
 	// Warp i1 using vector fields
 	WarpImage(pI1[0], width, height, stride, d_cv, d_i1calibrated);

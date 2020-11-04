@@ -3,6 +3,7 @@
 #include <opencv2/opencv.hpp>
 #include <stereotgv/stereotgv.h>
 #include <stereolite/stereolite.h>
+
 #include <time.h>
 
 #if _WIN64
@@ -38,6 +39,7 @@
 #pragma comment(lib, LIB_PATH "opencv_video" CV_VER_NUM LIB_EXT)
 
 // New
+int test_savePointCloudAsCSV();
 int test_radiallyBiasedOptimization();
 int test_censusTransform();
 
