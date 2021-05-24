@@ -1805,12 +1805,12 @@ int test_ImageSequenceFlow(std::string mainfolder, int startFrame, int endFrame,
 	return 0;
 }
 
-int test_ImageSequence(std::string mainfolder, int startFrame, int endFrame) {
+int test_ImageSequence(std::string mainfolder, int startFrame, int endFrame, float scaling) {
 	//std::string mainfolder = "h:/data_rs_iis/20191108_20";
 	StereoTgv * stereotgv = new StereoTgv();
 	int width = 848;
 	int height = 800;
-	float stereoScaling = 1.0f;
+	float stereoScaling = scaling;
 	int nLevel = 11;
 	float fScale = 1.2f;// 2.0f;
 	int nWarpIters = 400;// 10;
@@ -1926,7 +1926,7 @@ int test_ImageSequence(std::string mainfolder, int startFrame, int endFrame) {
 
 		cv::Mat depth16;
 		depthVis.convertTo(depth16, CV_16U, 256.0f);
-		cv::imwrite(mainfolder + "/output/im" + appender + std::to_string(k) + ".png", depth16);
+		cv::imwrite(mainfolder + "/outputdepth/im" + appender + std::to_string(k) + ".png", depth16);
 		saveDepthJetExponential(mainfolder + "/error/ours/im" + appender + std::to_string(k) + ".png", depthVis, maxDepthVis, 0.1f);
 		//saveDepthJet("h:/data_rs_iis/20190909/output1ddisparity/im" + std::to_string(k) + ".png", depthVis, 30.0f);
 		/*cv::Mat imout;

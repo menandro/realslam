@@ -52,7 +52,7 @@ int test_BlenderDataAllPlanesweep();
 int test_FaroDataAllPlanesweep();
 int test_FaroDataAll();
 int test_ImageSequencePlanesweep(std::string mainfolder, int startFrame, int endFrame);
-int test_ImageSequence(std::string mainfolder, int startFrame, int endFrame);
+int test_ImageSequence(std::string mainfolder, int startFrame, int endFrame, float scaling);
 int test_ImageSequenceFlow(std::string mainfolder, int startFrame, int endFrame, float scaling);
 
 int test_VehicleSegmentationSequence();
